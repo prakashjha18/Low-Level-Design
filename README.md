@@ -638,3 +638,895 @@ class UserService {
 - **Testability**: Loosely coupled code is easier to unit test
 - **Reusability**: Well-designed components can be reused
 - **Flexibility**: Easier to adapt to changing requirements
+
+---
+
+## 🧩 3. Design Patterns (Most Important Section)
+
+> You don't need all patterns — just these. Master them deeply.
+
+| Category | Pattern | Interview Frequency |
+|----------|---------|:-------------------:|
+| **Creational** | Singleton | ⭐⭐⭐ |
+| **Creational** | Factory / Factory Method | ⭐⭐⭐ |
+| **Structural** | Adapter | ⭐⭐ |
+| **Structural** | Decorator | ⭐⭐ |
+| **Behavioral** | Strategy | ⭐⭐⭐⭐⭐ |
+| **Behavioral** | Observer | ⭐⭐⭐⭐ |
+| **Behavioral** | State | ⭐⭐⭐ |
+
+**Common interview cues:**
+- *"How will you support multiple payment methods?"* → **Strategy**
+- *"How will you notify users?"* → **Observer**
+- *"How do you ensure only one instance?"* → **Singleton**
+- *"How will you create objects without exposing logic?"* → **Factory**
+
+---
+
+### 3.1 Singleton Pattern (Creational)
+
+**Intent:** Ensure a class has **exactly one instance** and provide a global point of access to it.
+
+**When to use:** Database connections, configuration managers, logging, thread pools — any shared resource.
+
+```java
+// ❌ Bad: Naive Singleton — NOT thread-safe
+class DatabaseConnection {
+    private static DatabaseConnection instance;
+
+    private DatabaseConnection() { } // private constructor
+
+    public static DatabaseConnection getInstance() {
+        if (instance == null) {
+            instance = new DatabaseConnection(); // 💀 Race condition in multi-threaded env
+        }
+        return instance;
+    }
+}
+```
+
+```java
+// ✅ Good: Thread-safe Singleton using Double-Checked Locking
+class DatabaseConnection {
+    private static volatile DatabaseConnection instance; // volatile prevents instruction reordering
+
+    private String connectionUrl;
+
+    private DatabaseConnection() {
+        // expensive initialization
+        this.connectionUrl = "jdbc:mysql://localhost:3306/mydb";
+        System.out.println("🔌 Database connection created");
+    }
+
+    public static DatabaseConnection getInstance() {
+        if (instance == null) {                    // 1st check (no lock)
+            synchronized (DatabaseConnection.class) {
+                if (instance == null) {            // 2nd check (with lock)
+                    instance = new DatabaseConnection();
+                }
+            }
+        }
+        return instance;
+    }
+
+    public void query(String sql) {
+        System.out.println("Executing: " + sql + " on " + connectionUrl);
+    }
+}
+
+// Usage
+DatabaseConnection db1 = DatabaseConnection.getInstance();
+DatabaseConnection db2 = DatabaseConnection.getInstance();
+System.out.println(db1 == db2); // true — same instance
+```
+
+```java
+// ✅ Best: Enum Singleton (recommended by Joshua Bloch — Effective Java)
+enum AppConfig {
+    INSTANCE;
+
+    private String appName = "MyApp";
+    private int maxRetries = 3;
+
+    public String getAppName() { return appName; }
+    public int getMaxRetries() { return maxRetries; }
+}
+
+// Usage
+AppConfig.INSTANCE.getAppName(); // "MyApp"
+// Handles serialization, reflection attacks, and thread safety automatically
+```
+
+**⚠️ Common follow-up questions:**
+- *"How do you break Singleton?"* → Reflection, Serialization, Cloning
+- *"How to prevent breaking?"* → Enum Singleton handles all three
+- *"Is Singleton an anti-pattern?"* → It can be, if overused. It creates hidden global state and makes testing harder.
+
+---
+
+### 3.2 Factory / Factory Method Pattern (Creational)
+
+**Intent:** Create objects **without exposing the instantiation logic** to the client. Let subclasses or a factory decide which class to instantiate.
+
+**When to use:** When the exact type of object isn't known until runtime, or when creation logic is complex.
+
+```java
+// ── Simple Factory ──
+
+// Step 1: Define the product interface
+interface Notification {
+    void send(String message);
+}
+
+// Step 2: Concrete products
+class EmailNotification implements Notification {
+    @Override
+    public void send(String message) {
+        System.out.println("📧 Email: " + message);
+    }
+}
+
+class SMSNotification implements Notification {
+    @Override
+    public void send(String message) {
+        System.out.println("📱 SMS: " + message);
+    }
+}
+
+class PushNotification implements Notification {
+    @Override
+    public void send(String message) {
+        System.out.println("🔔 Push: " + message);
+    }
+}
+
+// Step 3: Factory — encapsulates creation logic
+class NotificationFactory {
+    public static Notification create(String type) {
+        switch (type.toLowerCase()) {
+            case "email": return new EmailNotification();
+            case "sms":   return new SMSNotification();
+            case "push":  return new PushNotification();
+            default: throw new IllegalArgumentException("Unknown type: " + type);
+        }
+    }
+}
+
+// Usage — client never uses 'new' directly
+Notification n = NotificationFactory.create("email");
+n.send("Welcome!"); // 📧 Email: Welcome!
+```
+
+```java
+// ── Factory Method Pattern (more extensible) ──
+
+// Abstract creator
+abstract class NotificationCreator {
+    // Factory method — subclasses decide what to create
+    abstract Notification createNotification();
+
+    // Template method using the factory method
+    void notifyUser(String message) {
+        Notification notification = createNotification();
+        notification.send(message);
+    }
+}
+
+// Concrete creators
+class EmailNotificationCreator extends NotificationCreator {
+    @Override
+    Notification createNotification() {
+        return new EmailNotification();
+    }
+}
+
+class SMSNotificationCreator extends NotificationCreator {
+    @Override
+    Notification createNotification() {
+        return new SMSNotification();
+    }
+}
+
+// Usage
+NotificationCreator creator = new EmailNotificationCreator();
+creator.notifyUser("Your order is confirmed"); // 📧 Email: Your order is confirmed
+
+// To add a new notification type: create new product + new creator
+// No existing code is modified → OCP satisfied ✅
+```
+
+**Simple Factory vs Factory Method:**
+| Aspect | Simple Factory | Factory Method |
+|--------|---------------|----------------|
+| Creation logic | Centralized in one class | Distributed across subclasses |
+| Extensibility | Must modify factory for new types | Just add new creator subclass |
+| OCP compliance | ❌ Violates OCP | ✅ Follows OCP |
+| Complexity | Simple | Slightly more complex |
+| Use when | Few types, unlikely to grow | Types will grow over time |
+
+---
+
+### 3.3 Adapter Pattern (Structural)
+
+**Intent:** Convert the interface of a class into another interface that clients expect. Lets classes work together that otherwise couldn't due to **incompatible interfaces**.
+
+**When to use:** Integrating third-party libraries, legacy code, or systems with mismatched APIs.
+
+```java
+// Scenario: Your system uses a PaymentProcessor interface,
+// but a third-party library (Stripe) has a completely different API.
+
+// Your system's expected interface
+interface PaymentProcessor {
+    void pay(String customerId, double amount);
+    void refund(String transactionId);
+}
+
+// Third-party class — you CANNOT modify this
+class StripeAPI {
+    void makeCharge(String stripeCustomerId, int amountInCents) {
+        System.out.println("💳 Stripe charging " + amountInCents + " cents to " + stripeCustomerId);
+    }
+
+    void issueRefund(String chargeId, int amountInCents) {
+        System.out.println("↩️ Stripe refunding " + amountInCents + " cents for charge " + chargeId);
+    }
+}
+
+// Adapter — bridges the gap
+class StripeAdapter implements PaymentProcessor {
+    private StripeAPI stripe;
+
+    StripeAdapter(StripeAPI stripe) {
+        this.stripe = stripe;
+    }
+
+    @Override
+    public void pay(String customerId, double amount) {
+        // Convert dollars to cents + adapt method name
+        int cents = (int) (amount * 100);
+        stripe.makeCharge(customerId, cents);
+    }
+
+    @Override
+    public void refund(String transactionId) {
+        stripe.issueRefund(transactionId, 0); // full refund
+    }
+}
+
+// Usage — rest of your code doesn't know about Stripe's API
+PaymentProcessor processor = new StripeAdapter(new StripeAPI());
+processor.pay("cust_123", 49.99); // 💳 Stripe charging 4999 cents to cust_123
+```
+
+```java
+// Another common example: Adapter for legacy logging
+
+// New interface your system uses
+interface Logger {
+    void log(String level, String message);
+}
+
+// Legacy logger you can't change
+class OldFileLogger {
+    void writeToFile(String text) {
+        System.out.println("[FILE] " + text);
+    }
+}
+
+// Adapter
+class FileLoggerAdapter implements Logger {
+    private OldFileLogger oldLogger;
+
+    FileLoggerAdapter(OldFileLogger oldLogger) {
+        this.oldLogger = oldLogger;
+    }
+
+    @Override
+    public void log(String level, String message) {
+        oldLogger.writeToFile("[" + level + "] " + message);
+    }
+}
+```
+
+**Key insight:** The Adapter wraps an existing class with a new interface. It doesn't add new behavior — it just **translates**.
+
+---
+
+### 3.4 Decorator Pattern (Structural)
+
+**Intent:** Attach **additional responsibilities** to an object dynamically. Provides a flexible alternative to subclassing for extending functionality.
+
+**When to use:** Adding features like logging, encryption, compression, caching — layered on top of existing behavior without modifying the original class.
+
+```java
+// Step 1: Component interface
+interface Coffee {
+    String getDescription();
+    double getCost();
+}
+
+// Step 2: Concrete component (base)
+class SimpleCoffee implements Coffee {
+    @Override
+    public String getDescription() { return "Simple Coffee"; }
+
+    @Override
+    public double getCost() { return 50.0; }
+}
+
+// Step 3: Base Decorator (abstract)
+abstract class CoffeeDecorator implements Coffee {
+    protected Coffee decoratedCoffee;
+
+    CoffeeDecorator(Coffee coffee) {
+        this.decoratedCoffee = coffee;
+    }
+
+    public String getDescription() { return decoratedCoffee.getDescription(); }
+    public double getCost() { return decoratedCoffee.getCost(); }
+}
+
+// Step 4: Concrete Decorators
+class MilkDecorator extends CoffeeDecorator {
+    MilkDecorator(Coffee coffee) { super(coffee); }
+
+    @Override
+    public String getDescription() {
+        return decoratedCoffee.getDescription() + " + Milk";
+    }
+
+    @Override
+    public double getCost() {
+        return decoratedCoffee.getCost() + 15.0;
+    }
+}
+
+class WhipCreamDecorator extends CoffeeDecorator {
+    WhipCreamDecorator(Coffee coffee) { super(coffee); }
+
+    @Override
+    public String getDescription() {
+        return decoratedCoffee.getDescription() + " + Whip Cream";
+    }
+
+    @Override
+    public double getCost() {
+        return decoratedCoffee.getCost() + 25.0;
+    }
+}
+
+class CaramelDecorator extends CoffeeDecorator {
+    CaramelDecorator(Coffee coffee) { super(coffee); }
+
+    @Override
+    public String getDescription() {
+        return decoratedCoffee.getDescription() + " + Caramel";
+    }
+
+    @Override
+    public double getCost() {
+        return decoratedCoffee.getCost() + 30.0;
+    }
+}
+
+// Usage — stack decorators dynamically!
+Coffee coffee = new SimpleCoffee();                        // Simple Coffee ₹50
+coffee = new MilkDecorator(coffee);                        // + Milk ₹65
+coffee = new WhipCreamDecorator(coffee);                   // + Whip Cream ₹90
+coffee = new CaramelDecorator(coffee);                     // + Caramel ₹120
+
+System.out.println(coffee.getDescription()); // Simple Coffee + Milk + Whip Cream + Caramel
+System.out.println("₹" + coffee.getCost()); // ₹120.0
+```
+
+```java
+// Real-world example: I/O Stream Decorators (java.io uses this pattern!)
+
+// BufferedInputStream decorates FileInputStream
+InputStream is = new BufferedInputStream(
+                     new FileInputStream("data.txt"));
+
+// DataInputStream decorates BufferedInputStream
+DataInputStream dis = new DataInputStream(
+                          new BufferedInputStream(
+                              new FileInputStream("data.txt")));
+```
+
+**Decorator vs Inheritance:**
+| Aspect | Decorator | Inheritance |
+|--------|-----------|-------------|
+| When decided | Runtime | Compile time |
+| Combinations | Mix & match freely | Class explosion (MilkCoffee, MilkCaramelCoffee, ...) |
+| Open/Closed | ✅ Yes | ❌ Must create new subclass for each combo |
+
+---
+
+### 3.5 Strategy Pattern (Behavioral) ⭐ MOST IMPORTANT
+
+**Intent:** Define a family of algorithms, encapsulate each one, and make them **interchangeable**. The algorithm varies independently from the clients that use it.
+
+**When to use:** Multiple ways to do the same thing — pricing, sorting, validation, payment, discount calculation.
+
+> 🗣️ Interview cue: *"How will you support multiple payment methods?"* → **Strategy**
+
+```java
+// Step 1: Strategy interface
+interface PaymentStrategy {
+    void pay(double amount);
+    boolean validate();
+}
+
+// Step 2: Concrete strategies
+class CreditCardPayment implements PaymentStrategy {
+    private String cardNumber;
+    private String cvv;
+
+    CreditCardPayment(String cardNumber, String cvv) {
+        this.cardNumber = cardNumber;
+        this.cvv = cvv;
+    }
+
+    @Override
+    public boolean validate() {
+        return cardNumber != null && cardNumber.length() == 16;
+    }
+
+    @Override
+    public void pay(double amount) {
+        if (!validate()) throw new IllegalStateException("Invalid card");
+        System.out.println("💳 Paid ₹" + amount + " via Credit Card ending " + cardNumber.substring(12));
+    }
+}
+
+class UPIPayment implements PaymentStrategy {
+    private String upiId;
+
+    UPIPayment(String upiId) {
+        this.upiId = upiId;
+    }
+
+    @Override
+    public boolean validate() {
+        return upiId != null && upiId.contains("@");
+    }
+
+    @Override
+    public void pay(double amount) {
+        if (!validate()) throw new IllegalStateException("Invalid UPI ID");
+        System.out.println("📲 Paid ₹" + amount + " via UPI: " + upiId);
+    }
+}
+
+class WalletPayment implements PaymentStrategy {
+    private double walletBalance;
+
+    WalletPayment(double walletBalance) {
+        this.walletBalance = walletBalance;
+    }
+
+    @Override
+    public boolean validate() {
+        return walletBalance > 0;
+    }
+
+    @Override
+    public void pay(double amount) {
+        if (amount > walletBalance) throw new IllegalStateException("Insufficient wallet balance");
+        walletBalance -= amount;
+        System.out.println("👛 Paid ₹" + amount + " via Wallet. Remaining: ₹" + walletBalance);
+    }
+}
+
+// Step 3: Context — uses the strategy
+class ShoppingCart {
+    private List<Double> items = new ArrayList<>();
+
+    void addItem(double price) {
+        items.add(price);
+    }
+
+    double getTotal() {
+        return items.stream().mapToDouble(Double::doubleValue).sum();
+    }
+
+    void checkout(PaymentStrategy paymentStrategy) {  // strategy injected
+        double total = getTotal();
+        paymentStrategy.pay(total);
+    }
+}
+
+// Usage — swap payment strategy at runtime
+ShoppingCart cart = new ShoppingCart();
+cart.addItem(1200);
+cart.addItem(800);
+
+// Customer chooses payment at checkout time
+cart.checkout(new CreditCardPayment("1234567890123456", "123"));
+// 💳 Paid ₹2000.0 via Credit Card ending 3456
+
+cart.checkout(new UPIPayment("user@paytm"));
+// 📲 Paid ₹2000.0 via UPI: user@paytm
+
+cart.checkout(new WalletPayment(5000));
+// 👛 Paid ₹2000.0 via Wallet. Remaining: ₹3000.0
+```
+
+```java
+// Another classic: Discount Strategy
+
+interface DiscountStrategy {
+    double applyDiscount(double price);
+}
+
+class NoDiscount implements DiscountStrategy {
+    public double applyDiscount(double price) { return price; }
+}
+
+class PercentageDiscount implements DiscountStrategy {
+    private double percent;
+    PercentageDiscount(double percent) { this.percent = percent; }
+
+    public double applyDiscount(double price) {
+        return price - (price * percent / 100);
+    }
+}
+
+class FlatDiscount implements DiscountStrategy {
+    private double flat;
+    FlatDiscount(double flat) { this.flat = flat; }
+
+    public double applyDiscount(double price) {
+        return Math.max(0, price - flat);
+    }
+}
+
+// Usage
+DiscountStrategy diwaliSale = new PercentageDiscount(20);
+DiscountStrategy clearance  = new FlatDiscount(500);
+
+double price = 2000;
+System.out.println("Diwali: ₹" + diwaliSale.applyDiscount(price));  // ₹1600.0
+System.out.println("Clearance: ₹" + clearance.applyDiscount(price)); // ₹1500.0
+```
+
+**Why Strategy is king for LLD:** It embodies OCP + DIP + composition all at once. You can add new algorithms without modifying the context class.
+
+---
+
+### 3.6 Observer Pattern (Behavioral) ⭐ Very Common
+
+**Intent:** Define a **one-to-many dependency** between objects so that when one object (Subject) changes state, all its dependents (Observers) are notified automatically.
+
+**When to use:** Event systems, notifications, pub-sub, reactive UIs, stock price tickers.
+
+> 🗣️ Interview cue: *"How will you notify users?"* → **Observer**
+
+```java
+// Step 1: Observer interface
+interface Observer {
+    void update(String eventType, String data);
+}
+
+// Step 2: Subject (Observable)
+interface Subject {
+    void subscribe(String eventType, Observer observer);
+    void unsubscribe(String eventType, Observer observer);
+    void notifyObservers(String eventType, String data);
+}
+
+// Step 3: Concrete Subject — Event Manager
+class EventManager implements Subject {
+    private Map<String, List<Observer>> listeners = new HashMap<>();
+
+    @Override
+    public void subscribe(String eventType, Observer observer) {
+        listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(observer);
+    }
+
+    @Override
+    public void unsubscribe(String eventType, Observer observer) {
+        List<Observer> observers = listeners.get(eventType);
+        if (observers != null) observers.remove(observer);
+    }
+
+    @Override
+    public void notifyObservers(String eventType, String data) {
+        List<Observer> observers = listeners.getOrDefault(eventType, List.of());
+        for (Observer o : observers) {
+            o.update(eventType, data);
+        }
+    }
+}
+
+// Step 4: Concrete Observers
+class EmailAlertObserver implements Observer {
+    private String email;
+
+    EmailAlertObserver(String email) { this.email = email; }
+
+    @Override
+    public void update(String eventType, String data) {
+        System.out.println("📧 Email to " + email + " → [" + eventType + "] " + data);
+    }
+}
+
+class SMSAlertObserver implements Observer {
+    private String phone;
+
+    SMSAlertObserver(String phone) { this.phone = phone; }
+
+    @Override
+    public void update(String eventType, String data) {
+        System.out.println("📱 SMS to " + phone + " → [" + eventType + "] " + data);
+    }
+}
+
+class DashboardObserver implements Observer {
+    @Override
+    public void update(String eventType, String data) {
+        System.out.println("📊 Dashboard updated → [" + eventType + "] " + data);
+    }
+}
+
+// Step 5: Using it in a real-world scenario — E-commerce Store
+class Store {
+    private EventManager events;
+
+    Store() {
+        this.events = new EventManager();
+    }
+
+    public EventManager getEvents() {
+        return events;
+    }
+
+    void newProductArrival(String product) {
+        System.out.println("🏪 New product arrived: " + product);
+        events.notifyObservers("NEW_PRODUCT", product);
+    }
+
+    void flashSale(String deal) {
+        System.out.println("🔥 Flash sale started: " + deal);
+        events.notifyObservers("FLASH_SALE", deal);
+    }
+}
+
+// Usage
+Store store = new Store();
+
+Observer emailUser   = new EmailAlertObserver("alice@example.com");
+Observer smsUser     = new SMSAlertObserver("+91-9876543210");
+Observer dashboard   = new DashboardObserver();
+
+// Subscribe to specific events
+store.getEvents().subscribe("NEW_PRODUCT", emailUser);
+store.getEvents().subscribe("NEW_PRODUCT", dashboard);
+store.getEvents().subscribe("FLASH_SALE", smsUser);
+store.getEvents().subscribe("FLASH_SALE", emailUser);
+
+store.newProductArrival("iPhone 16");
+// 🏪 New product arrived: iPhone 16
+// 📧 Email to alice@example.com → [NEW_PRODUCT] iPhone 16
+// 📊 Dashboard updated → [NEW_PRODUCT] iPhone 16
+
+store.flashSale("50% off on Electronics");
+// 🔥 Flash sale started: 50% off on Electronics
+// 📱 SMS to +91-9876543210 → [FLASH_SALE] 50% off on Electronics
+// 📧 Email to alice@example.com → [FLASH_SALE] 50% off on Electronics
+```
+
+**Observer vs direct calls:**
+| Aspect | Direct Calls | Observer Pattern |
+|--------|-------------|-----------------|
+| Coupling | Tight — subject knows all listeners | Loose — subject only knows the interface |
+| Adding listeners | Modify subject code | Just subscribe — no modification |
+| Flexibility | Static | Dynamic (subscribe/unsubscribe at runtime) |
+
+---
+
+### 3.7 State Pattern (Behavioral)
+
+**Intent:** Allow an object to **alter its behavior when its internal state changes**. The object will appear to change its class.
+
+**When to use:** Vending machines, order status workflow, document approval, traffic lights — any entity with defined state transitions.
+
+```java
+// Scenario: Order management system with state transitions
+// NEW → CONFIRMED → SHIPPED → DELIVERED
+//                              ↘ CANCELLED (from any state before DELIVERED)
+
+// Step 1: State interface
+interface OrderState {
+    void next(Order order);
+    void prev(Order order);
+    void cancel(Order order);
+    String getStatus();
+}
+
+// Step 2: Concrete states
+class NewOrderState implements OrderState {
+    @Override
+    public void next(Order order) {
+        order.setState(new ConfirmedState());
+        System.out.println("✅ Order confirmed");
+    }
+
+    @Override
+    public void prev(Order order) {
+        System.out.println("⚠️ Already at the initial state");
+    }
+
+    @Override
+    public void cancel(Order order) {
+        order.setState(new CancelledState());
+        System.out.println("❌ Order cancelled");
+    }
+
+    @Override
+    public String getStatus() { return "NEW"; }
+}
+
+class ConfirmedState implements OrderState {
+    @Override
+    public void next(Order order) {
+        order.setState(new ShippedState());
+        System.out.println("📦 Order shipped");
+    }
+
+    @Override
+    public void prev(Order order) {
+        order.setState(new NewOrderState());
+        System.out.println("↩️ Order moved back to NEW");
+    }
+
+    @Override
+    public void cancel(Order order) {
+        order.setState(new CancelledState());
+        System.out.println("❌ Order cancelled");
+    }
+
+    @Override
+    public String getStatus() { return "CONFIRMED"; }
+}
+
+class ShippedState implements OrderState {
+    @Override
+    public void next(Order order) {
+        order.setState(new DeliveredState());
+        System.out.println("🎉 Order delivered!");
+    }
+
+    @Override
+    public void prev(Order order) {
+        order.setState(new ConfirmedState());
+        System.out.println("↩️ Order moved back to CONFIRMED");
+    }
+
+    @Override
+    public void cancel(Order order) {
+        order.setState(new CancelledState());
+        System.out.println("❌ Order cancelled (was in transit)");
+    }
+
+    @Override
+    public String getStatus() { return "SHIPPED"; }
+}
+
+class DeliveredState implements OrderState {
+    @Override
+    public void next(Order order) {
+        System.out.println("⚠️ Order already delivered — no next state");
+    }
+
+    @Override
+    public void prev(Order order) {
+        System.out.println("⚠️ Cannot undo delivery");
+    }
+
+    @Override
+    public void cancel(Order order) {
+        System.out.println("⚠️ Cannot cancel a delivered order");
+    }
+
+    @Override
+    public String getStatus() { return "DELIVERED"; }
+}
+
+class CancelledState implements OrderState {
+    @Override
+    public void next(Order order) {
+        System.out.println("⚠️ Cannot proceed — order is cancelled");
+    }
+
+    @Override
+    public void prev(Order order) {
+        System.out.println("⚠️ Cannot go back — order is cancelled");
+    }
+
+    @Override
+    public void cancel(Order order) {
+        System.out.println("⚠️ Already cancelled");
+    }
+
+    @Override
+    public String getStatus() { return "CANCELLED"; }
+}
+
+// Step 3: Context — the Order class
+class Order {
+    private OrderState state;
+    private String orderId;
+
+    Order(String orderId) {
+        this.orderId = orderId;
+        this.state = new NewOrderState(); // initial state
+    }
+
+    void setState(OrderState state) {
+        this.state = state;
+    }
+
+    void nextStep() { state.next(this); }
+    void prevStep() { state.prev(this); }
+    void cancel()   { state.cancel(this); }
+
+    void printStatus() {
+        System.out.println("Order " + orderId + " → Status: " + state.getStatus());
+    }
+}
+
+// Usage
+Order order = new Order("ORD-001");
+order.printStatus(); // Order ORD-001 → Status: NEW
+
+order.nextStep();    // ✅ Order confirmed
+order.printStatus(); // Order ORD-001 → Status: CONFIRMED
+
+order.nextStep();    // 📦 Order shipped
+order.nextStep();    // 🎉 Order delivered!
+order.printStatus(); // Order ORD-001 → Status: DELIVERED
+
+order.cancel();      // ⚠️ Cannot cancel a delivered order
+order.nextStep();    // ⚠️ Order already delivered — no next state
+```
+
+**State vs Strategy:**
+| Aspect | State | Strategy |
+|--------|-------|----------|
+| **Purpose** | Change behavior based on internal state | Choose an algorithm externally |
+| **Who decides** | Object transitions itself | Client injects the strategy |
+| **Awareness** | States know about each other (transitions) | Strategies are independent |
+| **Relationship** | States replace themselves | Strategy is set once (or swapped by client) |
+| **Think of it as** | Finite state machine | Pluggable algorithm |
+
+---
+
+### 🗺️ Design Pattern Cheat Sheet
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     WHEN TO USE WHAT?                                │
+├─────────────────┬───────────────────────────────────────────────────┤
+│  SINGLETON      │ "Only one instance needed"                        │
+│                 │ → DB connection, config, cache                    │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  FACTORY        │ "Create objects without specifying exact class"   │
+│                 │ → Notification types, document parsers            │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  ADAPTER        │ "Make incompatible interfaces work together"      │
+│                 │ → Third-party integrations, legacy code           │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  DECORATOR      │ "Add behavior dynamically without subclassing"    │
+│                 │ → I/O streams, coffee add-ons, logging layers     │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  STRATEGY       │ "Multiple ways to do the same thing"              │
+│                 │ → Payment methods, sorting, discounts             │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  OBSERVER       │ "Notify many when one thing changes"              │
+│                 │ → Events, notifications, pub-sub                  │
+├─────────────────┼───────────────────────────────────────────────────┤
+│  STATE          │ "Object behaves differently based on its state"   │
+│                 │ → Order workflow, vending machine, traffic light  │
+└─────────────────┴───────────────────────────────────────────────────┘
+```
