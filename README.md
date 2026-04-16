@@ -2944,3 +2944,460 @@ class PaymentReceipt {
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## ⚙️ 7. Data Structures in Design
+
+> In an LLD interview, picking the right data structure is as important as picking the right class.
+> Expect: *"Why did you choose this DS?"* — you must justify every choice.
+
+---
+
+### 7.1 HashMap — The Workhorse (Used Almost Everywhere)
+
+**What it is:** Key-value store with O(1) average lookup, insert, and delete.
+
+**When to use:** Anytime you need fast lookup by a unique key.
+
+```java
+// ── Use Case 1: Entity lookup by ID ──
+
+// Parking Lot → find ticket by ID in O(1)
+Map<String, Ticket> activeTickets = new HashMap<>();
+
+activeTickets.put(ticket.getTicketId(), ticket);        // O(1) insert
+Ticket t = activeTickets.get("TKT-001");                // O(1) lookup
+activeTickets.remove("TKT-001");                        // O(1) delete
+```
+
+```java
+// ── Use Case 2: Counting / frequency tracking ──
+
+// How many vehicles of each type are parked?
+Map<VehicleType, Integer> vehicleCount = new HashMap<>();
+
+vehicleCount.merge(VehicleType.CAR, 1, Integer::sum);   // increment
+int carCount = vehicleCount.getOrDefault(VehicleType.CAR, 0);
+```
+
+```java
+// ── Use Case 3: Grouping / categorization ──
+
+// Observer pattern → group observers by event type
+Map<String, List<Observer>> listeners = new HashMap<>();
+
+listeners.computeIfAbsent("ORDER_PLACED", k -> new ArrayList<>()).add(emailObserver);
+listeners.computeIfAbsent("ORDER_PLACED", k -> new ArrayList<>()).add(smsObserver);
+
+// Notify all observers for an event
+listeners.getOrDefault("ORDER_PLACED", List.of())
+         .forEach(o -> o.update("ORDER_PLACED", data));
+```
+
+```java
+// ── Use Case 4: Cache / memoization ──
+
+// Cache expensive computations
+Map<String, Double> fareCache = new HashMap<>();
+
+double getFare(String routeKey) {
+    return fareCache.computeIfAbsent(routeKey, key -> {
+        // expensive calculation only happens once per route
+        return calculateFare(key);
+    });
+}
+```
+
+**HashMap variants — when to use which:**
+
+| Variant | When to Use | Example |
+|---------|------------|---------|
+| `HashMap` | Default choice — fast, unordered | Product lookup by ID |
+| `LinkedHashMap` | Need **insertion order** preserved | LRU Cache, audit trail |
+| `TreeMap` | Need **sorted keys** | Leaderboard (sorted scores), scheduling |
+| `ConcurrentHashMap` | **Thread-safe** access | Shared resource in multi-threaded system |
+| `EnumMap` | Keys are an **enum** type | VehicleType → List\<ParkingSpot\> |
+
+```java
+// LinkedHashMap as LRU Cache (classic interview question)
+class LRUCache<K, V> extends LinkedHashMap<K, V> {
+    private final int capacity;
+
+    LRUCache(int capacity) {
+        super(capacity, 0.75f, true); // true = access order (not insertion order)
+        this.capacity = capacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > capacity; // auto-evict when full
+    }
+}
+
+LRUCache<String, User> cache = new LRUCache<>(100);
+cache.put("user-1", user);     // add to cache
+User u = cache.get("user-1");  // moves to "most recently used"
+// When cache exceeds 100, least recently used entry is auto-removed
+```
+
+---
+
+### 7.2 List vs Set — When Order & Duplicates Matter
+
+| Feature | List | Set |
+|---------|------|-----|
+| **Duplicates** | ✅ Allowed | ❌ No duplicates |
+| **Order** | ✅ Maintained (insertion order) | ❌ No order (`HashSet`) / ✅ Sorted (`TreeSet`) |
+| **Lookup** | O(n) — `contains()` scans | O(1) — `HashSet.contains()` |
+| **Use when** | Order matters, duplicates OK | Uniqueness required, fast membership checks |
+
+```java
+// ── When to use LIST ──
+
+// Order matters: queue of customers, order history, chat messages
+List<Order> orderHistory = new ArrayList<>();  // chronological order matters
+List<Message> chatMessages = new LinkedList<>();
+
+// Duplicates OK: items in cart (2x same product)
+List<CartItem> cartItems = new ArrayList<>();
+cartItems.add(new CartItem("Coke", 2));
+cartItems.add(new CartItem("Coke", 1));  // duplicate product is fine
+```
+
+```java
+// ── When to use SET ──
+
+// Uniqueness required: registered users, unique tags
+Set<String> registeredEmails = new HashSet<>();
+registeredEmails.add("alice@email.com");
+registeredEmails.add("alice@email.com");  // ignored — duplicate
+System.out.println(registeredEmails.size()); // 1
+
+// Fast membership check: is this user blocked?
+Set<String> blockedUsers = new HashSet<>();
+if (blockedUsers.contains(userId)) {  // O(1) check
+    throw new UnauthorizedException("User is blocked");
+}
+```
+
+```java
+// ── TreeSet: when you need sorted unique elements ──
+
+// Available time slots (sorted)
+TreeSet<LocalTime> availableSlots = new TreeSet<>();
+availableSlots.add(LocalTime.of(9, 0));
+availableSlots.add(LocalTime.of(10, 30));
+availableSlots.add(LocalTime.of(14, 0));
+
+// Find the next available slot after a given time
+LocalTime nextSlot = availableSlots.ceiling(LocalTime.of(10, 0)); // 10:30
+```
+
+**Decision guide:**
+
+```
+Q: Do I need duplicates?
+│
+├─ YES → LIST
+│         Q: Frequent random access by index?
+│         ├─ YES → ArrayList
+│         └─ NO (mostly add/remove from ends) → LinkedList
+│
+└─ NO (unique elements only) → SET
+          Q: Need sorted order?
+          ├─ YES → TreeSet (O(log n) operations)
+          └─ NO  → HashSet (O(1) operations)
+```
+
+---
+
+### 7.3 PriorityQueue — For Scheduling & Priority Problems
+
+**What it is:** A heap-based queue where elements are dequeued by **priority**, not insertion order.
+
+**Time complexity:** O(log n) insert, O(1) peek, O(log n) poll.
+
+**When to use:** Task scheduling, meeting room allocation, hospital triage, Dijkstra's algorithm.
+
+```java
+// ── Use Case 1: Task scheduler (highest priority first) ──
+
+class Task {
+    String name;
+    int priority; // lower number = higher priority
+
+    Task(String name, int priority) {
+        this.name = name;
+        this.priority = priority;
+    }
+}
+
+// Min-heap: lowest priority number comes out first
+PriorityQueue<Task> taskQueue = new PriorityQueue<>(
+    Comparator.comparingInt(t -> t.priority)
+);
+
+taskQueue.offer(new Task("Send report", 3));
+taskQueue.offer(new Task("Fix critical bug", 1));    // highest priority
+taskQueue.offer(new Task("Code review", 2));
+
+taskQueue.poll(); // Fix critical bug (priority 1)
+taskQueue.poll(); // Code review (priority 2)
+taskQueue.poll(); // Send report (priority 3)
+```
+
+```java
+// ── Use Case 2: Meeting room allocation (earliest end time first) ──
+
+class Meeting {
+    String title;
+    LocalTime start;
+    LocalTime end;
+
+    Meeting(String title, LocalTime start, LocalTime end) {
+        this.title = title;
+        this.start = start;
+        this.end = end;
+    }
+}
+
+// Min-heap by end time → room that frees up earliest is at the top
+PriorityQueue<Meeting> occupiedRooms = new PriorityQueue<>(
+    Comparator.comparing(m -> m.end)
+);
+
+// Schedule meetings
+Meeting m1 = new Meeting("Standup", LocalTime.of(9, 0), LocalTime.of(9, 30));
+Meeting m2 = new Meeting("Sprint Planning", LocalTime.of(9, 0), LocalTime.of(10, 0));
+
+occupiedRooms.offer(m1);
+occupiedRooms.offer(m2);
+
+// Check if earliest room is free for a new meeting starting at 9:30
+Meeting earliest = occupiedRooms.peek(); // Standup (ends at 9:30)
+if (earliest.end.compareTo(newMeeting.start) <= 0) {
+    occupiedRooms.poll();  // room is free, reuse it
+}
+```
+
+```java
+// ── Use Case 3: Hospital triage / emergency queue ──
+
+enum Severity { CRITICAL, SERIOUS, MODERATE, MINOR }
+
+class Patient {
+    String name;
+    Severity severity;
+    LocalTime arrivalTime;
+}
+
+// Critical patients first, then by arrival time (FIFO within same severity)
+PriorityQueue<Patient> triageQueue = new PriorityQueue<>(
+    Comparator.comparing((Patient p) -> p.severity)
+              .thenComparing(p -> p.arrivalTime)
+);
+```
+
+---
+
+### 7.4 Queue — For Real-World Flows (FIFO)
+
+**What it is:** First-In-First-Out data structure. Process in the order things arrive.
+
+**When to use:** Order processing, message queues, BFS traversal, request handling.
+
+```java
+// ── Use Case 1: Order processing pipeline ──
+
+Queue<Order> orderQueue = new LinkedList<>();
+
+// Orders arrive
+orderQueue.offer(new Order("ORD-001", "Pizza"));
+orderQueue.offer(new Order("ORD-002", "Burger"));
+orderQueue.offer(new Order("ORD-003", "Pasta"));
+
+// Kitchen processes in FIFO order
+while (!orderQueue.isEmpty()) {
+    Order order = orderQueue.poll();  // removes from front
+    kitchen.prepare(order);
+}
+```
+
+```java
+// ── Use Case 2: Ride sharing — driver request queue ──
+
+Queue<RideRequest> requestQueue = new LinkedList<>();
+
+// Passengers request rides (first-come-first-served)
+requestQueue.offer(new RideRequest("Alice", Location.DOWNTOWN));
+requestQueue.offer(new RideRequest("Bob", Location.AIRPORT));
+
+// When a driver becomes available
+if (!requestQueue.isEmpty()) {
+    RideRequest next = requestQueue.poll();
+    assignDriver(next, driver);
+}
+```
+
+```java
+// ── Use Case 3: Deque (Double-Ended Queue) — for undo/redo ──
+
+Deque<Action> undoStack = new ArrayDeque<>();  // use as stack
+Deque<Action> redoStack = new ArrayDeque<>();
+
+// User performs an action
+void performAction(Action action) {
+    action.execute();
+    undoStack.push(action);   // push to undo stack
+    redoStack.clear();        // clear redo after new action
+}
+
+// Undo
+void undo() {
+    if (!undoStack.isEmpty()) {
+        Action action = undoStack.pop();
+        action.reverse();
+        redoStack.push(action);
+    }
+}
+
+// Redo
+void redo() {
+    if (!redoStack.isEmpty()) {
+        Action action = redoStack.pop();
+        action.execute();
+        undoStack.push(action);
+    }
+}
+```
+
+**Queue variants:**
+
+| Variant | When to Use | Example |
+|---------|------------|---------|
+| `LinkedList` (as Queue) | Basic FIFO queue | Order processing, BFS |
+| `ArrayDeque` | Stack or double-ended queue (faster than Stack) | Undo/redo, expression evaluation |
+| `PriorityQueue` | Priority-based dequeue | Scheduling, triage |
+| `BlockingQueue` | Thread-safe producer-consumer | Message queue, task pool |
+
+---
+
+### 7.5 Bonus — Other DS Choices in LLD
+
+#### Stack (use `ArrayDeque`)
+
+```java
+// Undo/redo, expression parsing, back/forward navigation
+Deque<String> browserHistory = new ArrayDeque<>();
+browserHistory.push("google.com");
+browserHistory.push("github.com");
+browserHistory.pop();  // back to google.com
+```
+
+#### LinkedList
+
+```java
+// When you need frequent insertions/deletions in the middle
+// Example: playlist where songs are constantly added/removed/reordered
+LinkedList<Song> playlist = new LinkedList<>();
+playlist.add(2, newSong);   // insert at position — O(1) after traversal
+playlist.remove(1);          // remove from middle
+```
+
+#### EnumMap / EnumSet
+
+```java
+// When keys are always enum values — faster and more memory-efficient than HashMap
+enum VehicleType { BIKE, CAR, TRUCK }
+
+// Spots organized by vehicle type
+EnumMap<VehicleType, List<ParkingSpot>> spotsByType = new EnumMap<>(VehicleType.class);
+spotsByType.put(VehicleType.BIKE, bikeSpots);
+spotsByType.put(VehicleType.CAR, carSpots);
+
+// Allowed vehicle types for a floor
+EnumSet<VehicleType> allowedTypes = EnumSet.of(VehicleType.BIKE, VehicleType.CAR);
+if (allowedTypes.contains(vehicle.getType())) { /* allowed */ }
+```
+
+---
+
+### 🗺️ Data Structure Decision Cheat Sheet
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  DATA STRUCTURE DECISION GUIDE                          │
+├──────────────────┬──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need fast    │  HashMap<K,V>                                        │
+│   lookup by key" │  → O(1) get/put/remove                              │
+│                  │  → Ticket by ID, User by email, Product by code     │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need an      │  ArrayList<T>                                        │
+│   ordered list"  │  → O(1) random access, O(n) insert/delete           │
+│                  │  → Order history, cart items, chat messages          │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need unique  │  HashSet<T>                                          │
+│   elements"      │  → O(1) contains/add/remove                         │
+│                  │  → Blocked users, unique tags, registered emails    │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need sorted  │  TreeMap<K,V> or TreeSet<T>                          │
+│   elements"      │  → O(log n) operations                              │
+│                  │  → Leaderboard, time slots, price ranges            │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need FIFO    │  Queue (LinkedList or ArrayDeque)                    │
+│   processing"    │  → O(1) offer/poll                                  │
+│                  │  → Order queue, request pipeline, BFS               │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need LIFO /  │  Deque (ArrayDeque) — NOT Stack class               │
+│   stack behavior"│  → O(1) push/pop                                    │
+│                  │  → Undo/redo, browser back, expression eval         │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need priority│  PriorityQueue<T>                                    │
+│   ordering"      │  → O(log n) offer/poll, O(1) peek                  │
+│                  │  → Task scheduler, meeting rooms, triage            │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "I need order-  │  LinkedHashMap<K,V>                                  │
+│   preserving map"│  → Insertion-order or access-order                  │
+│                  │  → LRU Cache, audit log                             │
+│                  │                                                      │
+├──────────────────┼──────────────────────────────────────────────────────┤
+│                  │                                                      │
+│  "Keys are       │  EnumMap / EnumSet                                   │
+│   enums"         │  → Faster than HashMap/HashSet for enum keys        │
+│                  │  → Spots by VehicleType, permissions by Role        │
+│                  │                                                      │
+└──────────────────┴──────────────────────────────────────────────────────┘
+```
+
+### 📌 Common LLD Scenarios → DS Mapping
+
+| LLD Problem | Data Structure | Why |
+|-------------|---------------|-----|
+| Parking Lot — find ticket | `HashMap<String, Ticket>` | O(1) lookup by ticket ID |
+| Parking Lot — spots by type | `EnumMap<VehicleType, List<Spot>>` | Enum keys, grouped access |
+| Vending Machine — inventory | `HashMap<String, Product>` + `HashMap<String, Integer>` | Code → Product & stock count |
+| Library — active loans | `List<Loan>` | Ordered, duplicates possible (borrow same book twice after return) |
+| Library — unique members | `HashSet<String>` or `HashMap<String, Member>` | No duplicate member IDs |
+| Observer — listeners by event | `HashMap<String, List<Observer>>` | Group observers per event type |
+| Task Scheduler | `PriorityQueue<Task>` | Always process highest priority first |
+| Order Processing | `Queue<Order>` | FIFO — first order, first served |
+| Undo/Redo | `Deque<Action>` (×2) | Two stacks — undo stack & redo stack |
+| LRU Cache | `LinkedHashMap` | Access-order + auto-eviction |
+| Leaderboard | `TreeMap<Integer, List<Player>>` | Sorted by score, O(log n) updates |
+| Unique tags/categories | `HashSet<String>` | Fast contains check, no duplicates |
