@@ -17,6 +17,8 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
 | 8 | [Scalability Thinking](#️-8-scalability-thinking-light-not-hld-level) | Extensibility, Large Data, Thread Safety |
 | 9 | [Edge Cases & Constraints](#-9-edge-cases--constraints) | Null Handling, Input Validation, Concurrency, Capacity Limits, Defensive Coding |
 | 10 | [Communication](#️-10-communication) | Clarifying Questions, Explaining Design, Evolving Design, Time Management |
+| 11 | [Top 15 LLD Problems](#-11-the-top-15-classic-lld-problems) | Cheat sheet mapping classic problems to the design patterns you *must* use |
+| 12 | [UML Basics](#-12-uml-class-diagram-basics) | How to draw Class Diagrams, relationships, and arrows |
 
 ### Detailed Index
 
@@ -80,6 +82,10 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
   - [10.3 Evolving Your Design](#103-evolving-your-design-live)
   - [10.4 Time Management](#104-time-management--the-45-minute-framework)
   - [10.5 Common Mistakes](#105-common-communication-mistakes)
+- **11. Top 15 LLD Problems**
+  - [Problem-to-Pattern Cheat Sheet](#111-problem-to-pattern-mapping)
+- **12. UML Basics**
+  - [Class Diagrams & Arrows](#121-class-diagrams--arrows)
 
 ### 📂 Implementations
 
@@ -4777,4 +4783,101 @@ BufferedInputStream decorates FileInputStream."
 │     "With more time, I'd add [X, Y, Z]."                          │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🏆 11. The Top 15 Classic LLD Problems
+
+> When you see a specific system, you should immediately "snap" to the right design pattern. This cheat sheet gives you the primary patterns expected for the most common LLD interview questions.
+
+### 11.1 Problem-to-Pattern Mapping
+
+| Problem Statement | Core Entities | Primary Design Patterns | Key Challenges to Handle |
+|-------------------|---------------|-------------------------|--------------------------|
+| **1. Parking Lot** | `ParkingLot`, `Level`, `Spot`, `Vehicle`, `Ticket` | **Strategy** (Pricing), **Factory** (Ticket generation), **State** (Spot status) | Concurrency (double booking a spot), Multiple vehicle sizes |
+| **2. Vending Machine** | `Machine`, `Inventory`, `Coin`, `Product`, `State` | **State** (Idle, HasMoney, Dispensing) | State transitions, exact change calculation, inventory tracking |
+| **3. BookMyShow / Ticketing** | `Cinema`, `Screen`, `Show`, `Seat`, `Ticket` | **Concurrency Locking** (Seat reservation), **Observer** (Payment success notification) | Handle race conditions (2 users booking same seat), 10-min booking lock |
+| **4. Library Mgmt System** | `Book`, `Member`, `Loan`, `Fine`, `Reservation` | **Observer** (Book availability), **Strategy** (Fine calc) | Max loan limits, overdue fines, book reservation queue |
+| **5. Elevator System** | `Elevator`, `Button`, `Floor`, `Request` | **State** (Moving Up, Down, Idle), **Strategy** (Dispatch algorithm) | Minimizing wait time, dispatching the right car (Scan algorithm) |
+| **6. Tic-Tac-Toe / Chess** | `Board`, `Piece`, `Player`, `Game` | **Strategy** (Winning logic), **Command** (Undo move) | Checking win condition efficiently, turn management |
+| **7. Amazon / E-Commerce** | `User`, `Cart`, `Product`, `Order`, `Payment` | **Strategy** (Payment, Discount), **Observer** (Order status) | Inventory reservation, concurrent checkout, discount stacking |
+| **8. Splitwise** | `User`, `Group`, `Expense`, `Split` | **Strategy** (Split type: Equal, Exact, Percent) | Graph algorithm to simplify debts (minimizing transactions) |
+| **9. Ride Sharing (Uber)** | `Rider`, `Driver`, `Ride`, `Location` | **Strategy** (Pricing based on surge), **Observer** (Driver matching) | Geolocation/quadtrees (HLD overlap), driver states |
+| **10. ATM Machine** | `Card`, `Account`, `Transaction`, `CashDispenser` | **State** (CardInserted, PinEntered), **Chain of Resp** (Dispensing 100s, 500s) | Hardware abstractions, transactional safety |
+| **11. Cache (LRU/LFU)** | `Cache`, `Node`, `EvictionPolicy` | **Strategy** (Eviction: LRU/LFU), **Factory** | HashMap + Doubly LinkedList for O(1) operations |
+| **12. Traffic Light System** | `Intersection`, `Light`, `Timer` | **State** (Red, Yellow, Green), **Observer** (Emergency override) | Timing management, safe transitions, ambulance override |
+| **13. Restaurant / Swiggy** | `Restaurant`, `Menu`, `Order`, `Delivery` | **State** (Order status), **Observer** (Tracking notifications) | FIFO Order Queue, tracking delivery executive |
+| **14. Snake & Ladders** | `Board`, `Dice`, `Player`, `Snake`, `Ladder` | **Factory** (Board generation), **Strategy** (Dice type) | Handling cycles, turn management |
+| **15. Logger** | `Logger`, `LogAppender`, `LogFilter` | **Chain of Responsibility** (Info -> Debug -> Error), **Singleton** | Log levels, output destinations (File, Console) |
+
+---
+
+## 📐 12. UML Class Diagram Basics
+
+> Formal UML isn't strictly required, but drawing a clean class diagram on a whiteboard (or virtual whiteboard) is the best way to communicate your architecture in the first 10 minutes.
+
+### 12.1 Class Diagrams & Arrows
+
+Learn these 4 arrows. They represent the relationships discussed in Section 4.2.
+
+```
+1. INHERITANCE (IS-A)
+   Empty Triangle pointing to Parent
+   Dog ───▷ Animal
+
+2. IMPLEMENTATION (Realization)
+   Dotted line with Empty Triangle pointing to Interface
+   Car - - -▷ Drivable
+
+3. AGGREGATION (HAS-A, weak lifecycle)
+   Empty Diamond pointing to "Whole"
+   University ◇─── Professor
+   (Professor survives if University closes)
+
+4. COMPOSITION (HAS-A, strong lifecycle)
+   Filled Diamond pointing to "Whole"
+   House ◆─── Room
+   (Room is destroyed if House is destroyed)
+
+5. DIRECTED ASSOCIATION (Uses-A)
+   Simple arrow indicating navigation
+   Customer ───> Order
+```
+
+#### How to draw a Class
+
+Keep it simple. You don't need to list every getter/setter.
+
+```
+┌───────────────────────────┐
+│         ClassName         │
+├───────────────────────────┤
+│ - privateField: Type      │
+│ + publicField: Type       │
+│ # protectedField: Type    │
+├───────────────────────────┤
+│ + method(param: Type): Ret│
+│ - helperMethod(): void    │
+└───────────────────────────┘
+```
+
+**Example Diagram (Parking Lot):**
+
+```
+┌────────────────┐          ┌────────────────┐
+│  ParkingLot    │◆─────────│ ParkingFloor   │
+└────────────────┘   1..n   └────────────────┘
+        │                            ◆
+        │                            │ 1..n
+        │                            ▼
+        │                   ┌────────────────┐
+        └──────────────────▷│  ParkingSpot   │
+             uses           └────────────────┘
+                                     △
+                                     │ (Inheritance)
+                            ┌────────┴───────┐
+                     ┌──────┴──────┐  ┌──────┴──────┐
+                     │CompactSpot  │  │ LargeSpot   │
+                     └─────────────┘  └─────────────┘
 ```
