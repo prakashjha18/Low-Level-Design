@@ -3871,3 +3871,540 @@ class AuditedOrderService implements OrderService {
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🔐 9. Edge Cases & Constraints
+
+> This is where most candidates fail. Thinking about edge cases separates **good** engineers from **great** ones.
+> Always ask the interviewer: *"What are the constraints?"*
+
+---
+
+### 9.1 Null Handling — The Billion Dollar Mistake
+
+> Tony Hoare (inventor of null): *"I call it my billion-dollar mistake."*
+
+#### Strategy 1: Fail fast — reject nulls at the boundary
+
+```java
+// ✅ Validate at construction / method entry — never let null propagate deep
+
+class Order {
+    private final String orderId;
+    private final Customer customer;
+    private final List<LineItem> items;
+
+    Order(String orderId, Customer customer, List<LineItem> items) {
+        // Guard clauses — fail IMMEDIATELY with clear messages
+        if (orderId == null || orderId.isBlank())
+            throw new IllegalArgumentException("Order ID cannot be null or empty");
+        if (customer == null)
+            throw new IllegalArgumentException("Customer cannot be null");
+        if (items == null || items.isEmpty())
+            throw new IllegalArgumentException("Order must have at least one item");
+
+        this.orderId = orderId;
+        this.customer = customer;
+        this.items = new ArrayList<>(items); // defensive copy
+    }
+}
+```
+
+#### Strategy 2: Use `Optional` for "might not exist" results
+
+```java
+// ❌ Bad: returning null — caller forgets to check → NullPointerException
+
+User findUser(String id) {
+    return userMap.get(id);  // returns null if not found 💀
+}
+
+// Caller:
+User user = findUser("123");
+user.getName();  // 💀 NPE if user is null
+
+// ✅ Good: Optional forces the caller to handle the absent case
+
+Optional<User> findUser(String id) {
+    return Optional.ofNullable(userMap.get(id));
+}
+
+// Caller MUST handle it:
+findUser("123")
+    .ifPresentOrElse(
+        user -> System.out.println("Found: " + user.getName()),
+        ()   -> System.out.println("User not found")
+    );
+
+// Or with default:
+User user = findUser("123").orElseThrow(
+    () -> new UserNotFoundException("User 123 not found")
+);
+```
+
+#### Strategy 3: Never return null collections
+
+```java
+// ❌ Bad: returning null for "no results"
+List<Product> search(String keyword) {
+    if (noResults) return null;  // 💀 caller does list.size() → NPE
+}
+
+// ✅ Good: return empty collection
+List<Product> search(String keyword) {
+    if (noResults) return Collections.emptyList();  // safe to iterate over
+}
+
+// ✅ Also good for Maps:
+Map<String, List<Observer>> listeners = new HashMap<>();
+
+// getOrDefault instead of get (which returns null)
+List<Observer> obs = listeners.getOrDefault("EVENT", List.of());
+// obs is never null — safe to iterate
+```
+
+#### The null handling hierarchy
+
+```
+1. PREVENT   → Don't accept null in constructors/methods (guard clauses)
+2. REPRESENT → Use Optional<T> for "might be absent" return values
+3. DEFAULT   → Use getOrDefault(), orElse(), emptyList() for fallbacks
+4. NEVER     → Never return null for collections — return empty instead
+```
+
+---
+
+### 9.2 Invalid Input Handling
+
+#### The validation pattern — validate at the boundary
+
+```java
+class BookingService {
+
+    Booking createBooking(BookingRequest request) {
+        // ── LAYER 1: Null checks ──
+        if (request == null)
+            throw new IllegalArgumentException("Booking request cannot be null");
+
+        // ── LAYER 2: Format validation ──
+        if (request.getEmail() == null || !request.getEmail().contains("@"))
+            throw new InvalidInputException("Invalid email format");
+
+        if (request.getDate() == null)
+            throw new InvalidInputException("Booking date is required");
+
+        // ── LAYER 3: Business rule validation ──
+        if (request.getDate().isBefore(LocalDate.now()))
+            throw new InvalidInputException("Cannot book in the past");
+
+        if (request.getGuests() <= 0 || request.getGuests() > 10)
+            throw new InvalidInputException("Guests must be between 1 and 10");
+
+        // ── LAYER 4: State validation ──
+        Slot slot = slotRepository.find(request.getSlotId());
+        if (slot == null)
+            throw new SlotNotFoundException("Slot not found: " + request.getSlotId());
+
+        if (!slot.isAvailable())
+            throw new SlotUnavailableException("Slot already booked");
+
+        // ── Happy path ──
+        return new Booking(request, slot);
+    }
+}
+```
+
+#### Common invalid inputs to handle
+
+| Input Type | What Could Go Wrong | How to Handle |
+|-----------|---------------------|---------------|
+| **Strings** | null, empty, blank, too long, special chars | `if (s == null \|\| s.isBlank())`, max length check |
+| **Numbers** | negative, zero, overflow, NaN | range validation, `amount > 0`, `amount <= MAX` |
+| **Dates** | null, past dates, invalid ranges | `date.isAfter(now)`, `end.isAfter(start)` |
+| **Enums** | invalid string → enum conversion | Use enum directly as param, not String |
+| **Collections** | null, empty when shouldn't be | `list != null && !list.isEmpty()` |
+| **IDs / References** | non-existent entity, already deleted | Lookup + null check before using |
+| **Email/Phone** | malformed format | Regex or simple contains check |
+
+#### The validation order
+
+```
+Always validate in this order:
+
+1. NULL       → Is it present?
+2. FORMAT     → Is it well-formed? (email, date, etc.)
+3. RANGE      → Is it within acceptable bounds? (1-100, positive, etc.)
+4. BUSINESS   → Does it make sense? (can't book in the past, etc.)
+5. STATE      → Is the system in the right state? (slot available, etc.)
+6. PERMISSION → Is the user allowed to do this?
+```
+
+---
+
+### 9.3 Concurrency Edge Cases
+
+#### Double-booking problem
+
+```java
+// ❌ Classic race condition: check-then-act is NOT atomic
+
+// Thread A                          Thread B
+// reads: slot.isAvailable() → true
+//                                   reads: slot.isAvailable() → true
+// slot.book(userA) ✅
+//                                   slot.book(userB) ✅  💀 DOUBLE BOOKED!
+```
+
+```java
+// ✅ Fix: make check-and-book atomic
+
+class SlotBookingService {
+    public synchronized Booking book(User user, Slot slot) {
+        if (!slot.isAvailable()) {               // check
+            throw new SlotUnavailableException();
+        }
+        slot.markBooked(user);                    // act
+        return new Booking(user, slot);
+    }                                            // both steps atomic
+}
+```
+
+#### Inventory underflow
+
+```java
+// ❌ Two threads decrement stock simultaneously
+
+// Stock = 1
+// Thread A: stock > 0? YES → stock-- → stock = 0 ✅
+// Thread B: stock > 0? YES → stock-- → stock = -1 💀 UNDERFLOW!
+```
+
+```java
+// ✅ Fix: use AtomicInteger with compareAndSet
+
+class Inventory {
+    private final Map<String, AtomicInteger> stock = new ConcurrentHashMap<>();
+
+    boolean tryReduce(String productCode) {
+        AtomicInteger count = stock.get(productCode);
+        if (count == null) return false;
+
+        while (true) {
+            int current = count.get();
+            if (current <= 0) return false;                        // out of stock
+            if (count.compareAndSet(current, current - 1)) {       // atomic CAS
+                return true;  // only one thread succeeds
+            }
+            // if CAS fails, another thread modified it → retry loop
+        }
+    }
+}
+```
+
+#### Deadlock awareness
+
+```java
+// ❌ Deadlock: two locks acquired in different order
+
+// Thread A: lock(account1) → lock(account2) → transfer
+// Thread B: lock(account2) → lock(account1) → transfer
+// → Both waiting for each other forever 💀
+
+// ✅ Fix: always acquire locks in a consistent order
+
+void transfer(Account from, Account to, double amount) {
+    // Always lock the lower ID first → consistent ordering
+    Account first  = from.getId() < to.getId() ? from : to;
+    Account second = from.getId() < to.getId() ? to : from;
+
+    synchronized (first) {
+        synchronized (second) {
+            from.debit(amount);
+            to.credit(amount);
+        }
+    }
+}
+```
+
+---
+
+### 9.4 Capacity Limits
+
+#### Always define and enforce limits
+
+```java
+class ShoppingCart {
+    private static final int MAX_ITEMS = 50;
+    private static final double MAX_TOTAL = 500000; // ₹5 lakh
+
+    private final List<CartItem> items = new ArrayList<>();
+
+    void addItem(CartItem item) {
+        // Capacity check
+        if (items.size() >= MAX_ITEMS) {
+            throw new CartFullException("Cart cannot have more than " + MAX_ITEMS + " items");
+        }
+
+        // Value limit check
+        double newTotal = getTotal() + item.getPrice() * item.getQuantity();
+        if (newTotal > MAX_TOTAL) {
+            throw new CartLimitExceededException("Cart total cannot exceed ₹" + MAX_TOTAL);
+        }
+
+        items.add(item);
+    }
+}
+```
+
+```java
+class ParkingLot {
+    private static final int MAX_FLOORS = 10;
+    private static final int MAX_SPOTS_PER_FLOOR = 200;
+
+    private final List<ParkingFloor> floors;
+
+    // Enforce at creation
+    ParkingLot(int numFloors, int spotsPerFloor) {
+        if (numFloors > MAX_FLOORS)
+            throw new IllegalArgumentException("Max " + MAX_FLOORS + " floors allowed");
+        if (spotsPerFloor > MAX_SPOTS_PER_FLOOR)
+            throw new IllegalArgumentException("Max " + MAX_SPOTS_PER_FLOOR + " spots per floor");
+
+        this.floors = new ArrayList<>();
+        // ... initialize
+    }
+}
+```
+
+```java
+class LibraryMember {
+    private static final int MAX_ACTIVE_LOANS = 5;
+    private static final int MAX_RESERVATION_DAYS = 30;
+
+    private final List<Loan> activeLoans = new ArrayList<>();
+
+    Loan borrowBook(BookCopy copy) {
+        if (activeLoans.size() >= MAX_ACTIVE_LOANS) {
+            throw new BorrowLimitException(
+                "Cannot borrow more than " + MAX_ACTIVE_LOANS + " books"
+            );
+        }
+
+        // Check for overdue fines
+        boolean hasUnpaidFines = activeLoans.stream()
+            .anyMatch(loan -> loan.getFine() != null && !loan.getFine().isPaid());
+        if (hasUnpaidFines) {
+            throw new UnpaidFineException("Clear overdue fines before borrowing");
+        }
+
+        // ... proceed
+    }
+}
+```
+
+#### Common limits to define
+
+| System | Constraint | Typical Limit |
+|--------|-----------|---------------|
+| Shopping Cart | Max items | 50 items |
+| Shopping Cart | Max value | ₹5,00,000 |
+| Library | Active loans per member | 5 books |
+| Library | Loan duration | 14-30 days |
+| Parking Lot | Spots per floor | 100-500 |
+| Parking Lot | Max floors | 5-10 |
+| Vending Machine | Max coins accepted | 20 coins per transaction |
+| User Account | Failed login attempts | 5 → lock account |
+| Booking System | Future booking window | 30-90 days ahead |
+| Notification | Rate limit | 10 notifications/minute |
+
+---
+
+### 9.5 Defensive Coding Patterns
+
+#### Defensive copies — don't leak internal state
+
+```java
+// ❌ Bad: leaking mutable internal list
+
+class ShoppingCart {
+    private List<Item> items = new ArrayList<>();
+
+    List<Item> getItems() {
+        return items;  // 💀 caller can do getItems().clear() — destroys cart!
+    }
+}
+
+// ✅ Good: return unmodifiable view
+
+class ShoppingCart {
+    private final List<Item> items = new ArrayList<>();
+
+    List<Item> getItems() {
+        return Collections.unmodifiableList(items);  // read-only view
+    }
+
+    // Or return a copy
+    List<Item> getItemsCopy() {
+        return new ArrayList<>(items);  // caller gets their own copy
+    }
+}
+```
+
+#### Defensive constructor copies
+
+```java
+// ❌ Bad: storing reference to caller's list
+
+class Order {
+    private List<Item> items;
+
+    Order(List<Item> items) {
+        this.items = items;  // 💀 caller can modify list after construction
+    }
+}
+
+// Caller:
+List<Item> myList = new ArrayList<>();
+myList.add(item1);
+Order order = new Order(myList);
+myList.clear();  // 💀 order's items are now empty!
+
+// ✅ Good: copy on construction
+
+class Order {
+    private final List<Item> items;
+
+    Order(List<Item> items) {
+        this.items = new ArrayList<>(items);  // defensive copy — independent
+    }
+}
+```
+
+#### Immutable objects — safest design
+
+```java
+// ✅ Best: make value objects completely immutable
+
+final class Money {
+    private final double amount;
+    private final String currency;
+
+    Money(double amount, String currency) {
+        if (amount < 0) throw new IllegalArgumentException("Amount cannot be negative");
+        if (currency == null) throw new IllegalArgumentException("Currency required");
+        this.amount = amount;
+        this.currency = currency;
+    }
+
+    public double getAmount()   { return amount; }
+    public String getCurrency() { return currency; }
+
+    // Return new instance instead of modifying
+    Money add(Money other) {
+        if (!this.currency.equals(other.currency))
+            throw new IllegalArgumentException("Currency mismatch");
+        return new Money(this.amount + other.amount, this.currency);
+    }
+
+    // No setters. No mutable state. Thread-safe by default.
+}
+```
+
+---
+
+### 9.6 Edge Cases by System Type
+
+#### Parking Lot
+
+| Edge Case | How to Handle |
+|-----------|---------------|
+| Park when full | Throw `ParkingFullException` with vehicle type |
+| Unpark twice with same ticket | Track ticket usage state → `TicketAlreadyUsedException` |
+| Vehicle already parked | Check by license plate before parking |
+| Invalid vehicle type for spot | Validate type compatibility |
+| Negative parking duration | Use `LocalDateTime.now()` for entry, validate exit > entry |
+| Power failure mid-transaction | Store state persistently, recover on restart |
+
+#### Vending Machine
+
+| Edge Case | How to Handle |
+|-----------|---------------|
+| Select without inserting money | State pattern → IdleState rejects selection |
+| Product out of stock | Check inventory before dispensing |
+| Insufficient balance | Calculate deficit, prompt user |
+| Machine can't make change | Track available change coins (bonus feature) |
+| Cancel during dispensing | State pattern → DispensingState rejects cancel |
+| Insert coins beyond max | Enforce max coin limit per transaction |
+
+#### Library System
+
+| Edge Case | How to Handle |
+|-----------|---------------|
+| Borrow when at max limit | Check `activeLoans.size() < MAX_BOOKS` |
+| Borrow already borrowed book | Check book copy status |
+| Return book not in system | Validate ticket/loan ID exists |
+| Overdue fine calculation | `ChronoUnit.DAYS.between(dueDate, returnDate)` |
+| Member with unpaid fines | Block borrowing until fines cleared |
+| Book reserved by another member | Check reservation status |
+
+#### Booking System
+
+| Edge Case | How to Handle |
+|-----------|---------------|
+| Double booking same slot | Synchronized check-and-book |
+| Booking in the past | `date.isAfter(LocalDate.now())` |
+| Overlapping time slots | Check for time range intersection |
+| Cancel after event started | Business rule: block cancellation |
+| User books > max allowed | Track active bookings per user |
+| Timeout: hold slot but don't confirm | TTL on tentative bookings |
+
+---
+
+### 🎯 Edge Case Master Checklist
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│         EDGE CASE MASTER CHECKLIST — USE IN EVERY INTERVIEW         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  🚫 NULL & EMPTY                                                    │
+│  □ What if the input is null?                                       │
+│  □ What if the string is empty or blank?                            │
+│  □ What if the collection is empty?                                 │
+│  □ What if the entity doesn't exist? (lookup returns null)          │
+│                                                                     │
+│  ⚠️ INVALID VALUES                                                  │
+│  □ What if the amount is negative or zero?                          │
+│  □ What if the date is in the past?                                 │
+│  □ What if the ID format is wrong?                                  │
+│  □ What if the enum value is unrecognized?                          │
+│                                                                     │
+│  🔁 DUPLICATE / REPEAT                                              │
+│  □ What if the same action is performed twice?                      │
+│  □ What if the entity already exists?                               │
+│  □ What if the same ticket is used twice?                           │
+│                                                                     │
+│  📊 CAPACITY & LIMITS                                               │
+│  □ What if the system is full? (parking lot, cart, loans)           │
+│  □ What if max limit per user is reached?                           │
+│  □ What if the value exceeds max allowed?                           │
+│                                                                     │
+│  🔄 STATE & ORDER                                                   │
+│  □ What if actions happen out of expected order?                    │
+│  □ What if the entity is in the wrong state? (cancel a delivered    │
+│    order)                                                           │
+│  □ What if a transition is attempted that's not allowed?            │
+│                                                                     │
+│  👥 CONCURRENCY                                                     │
+│  □ What if two users act on the same resource simultaneously?       │
+│  □ Is my check-then-act atomic?                                     │
+│  □ Can inventory go negative?                                       │
+│                                                                     │
+│  💡 FIRST QUESTION TO ASK IN INTERVIEWS                             │
+│  "What are the constraints of this system?"                         │
+│  - Max users? Max items? Max concurrent operations?                 │
+│  - This shows maturity and thoroughness.                            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
