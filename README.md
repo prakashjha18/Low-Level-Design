@@ -1530,3 +1530,894 @@ order.nextStep();    // ⚠️ Order already delivered — no next state
 │                 │ → Order workflow, vending machine, traffic light  │
 └─────────────────┴───────────────────────────────────────────────────┘
 ```
+
+---
+
+## 4. Class Design Skills (THIS is the Real Test)
+
+> You should be able to look at **any system** and immediately start thinking:
+> *"What are the core objects? What do they own? How do they interact?"*
+
+This section covers the **thinking framework** you need in every LLD interview.
+
+---
+
+### 4.1 Identifying Entities, Attributes, and Methods
+
+**The 3-step mental model:**
+
+```
+Step 1: NOUNS → Entities (classes)
+Step 2: ADJECTIVES / PROPERTIES → Attributes (fields)
+Step 3: VERBS / ACTIONS → Methods (behavior)
+```
+
+**Example — Parking Lot System:**
+
+> *"Design a parking lot that supports different vehicle types, has multiple floors, and charges based on duration."*
+
+```
+Nouns:     ParkingLot, Floor, Spot, Vehicle, Ticket, Payment
+Properties: spotNumber, floorNumber, vehicleType, entryTime, exitTime, amount
+Verbs:     parkVehicle, unparkVehicle, calculateFee, findAvailableSpot, processPayment
+```
+
+```java
+// Translating the mental model to code
+
+enum VehicleType { BIKE, CAR, TRUCK }
+
+class Vehicle {
+    private String licensePlate;
+    private VehicleType type;
+
+    Vehicle(String licensePlate, VehicleType type) {
+        this.licensePlate = licensePlate;
+        this.type = type;
+    }
+
+    public String getLicensePlate() { return licensePlate; }
+    public VehicleType getType() { return type; }
+}
+
+class ParkingSpot {
+    private int spotNumber;
+    private VehicleType supportedType;
+    private Vehicle currentVehicle;  // null if empty
+
+    ParkingSpot(int spotNumber, VehicleType supportedType) {
+        this.spotNumber = spotNumber;
+        this.supportedType = supportedType;
+    }
+
+    boolean isAvailable() { return currentVehicle == null; }
+
+    boolean canFit(Vehicle vehicle) {
+        return isAvailable() && vehicle.getType() == supportedType;
+    }
+
+    void park(Vehicle vehicle) {
+        if (!canFit(vehicle)) throw new IllegalStateException("Cannot park here");
+        this.currentVehicle = vehicle;
+    }
+
+    Vehicle unpark() {
+        Vehicle v = this.currentVehicle;
+        this.currentVehicle = null;
+        return v;
+    }
+}
+
+class ParkingFloor {
+    private int floorNumber;
+    private List<ParkingSpot> spots;
+
+    ParkingFloor(int floorNumber, List<ParkingSpot> spots) {
+        this.floorNumber = floorNumber;
+        this.spots = spots;
+    }
+
+    ParkingSpot findAvailableSpot(VehicleType type) {
+        return spots.stream()
+                    .filter(s -> s.canFit(new Vehicle("", type)))
+                    .findFirst()
+                    .orElse(null);
+    }
+}
+
+class Ticket {
+    private String ticketId;
+    private Vehicle vehicle;
+    private ParkingSpot spot;
+    private LocalDateTime entryTime;
+
+    Ticket(String ticketId, Vehicle vehicle, ParkingSpot spot) {
+        this.ticketId = ticketId;
+        this.vehicle = vehicle;
+        this.spot = spot;
+        this.entryTime = LocalDateTime.now();
+    }
+
+    // getters...
+}
+```
+
+**Key takeaway:** Start from the problem statement. Underline nouns, circle verbs — that's your class diagram skeleton.
+
+---
+
+### 4.2 Relationships Between Classes
+
+This is where most candidates get it wrong. There are **three key relationships** you must understand:
+
+#### Overview Table
+
+| Relationship | Meaning | Strength | Lifecycle | Example |
+|-------------|---------|:--------:|-----------|---------|
+| **Association** | "uses" or "knows about" | Weak | Independent | Doctor ↔ Patient |
+| **Aggregation** | "has-a" (shared) | Medium | Independent | Department → Professor |
+| **Composition** | "has-a" (owned) | Strong | Dependent (part dies with whole) | House → Room |
+
+---
+
+#### 4.2.1 Association
+
+**Two objects are related but exist independently.** Neither owns the other. They can exist without each other.
+
+Think: *"X uses Y"* or *"X knows about Y"*
+
+```java
+// A Doctor treats many Patients. A Patient can visit many Doctors.
+// Neither owns the other — both exist independently.
+
+class Doctor {
+    private String name;
+    private String specialization;
+    private List<Patient> patients;  // association — Doctor knows about Patients
+
+    Doctor(String name, String specialization) {
+        this.name = name;
+        this.specialization = specialization;
+        this.patients = new ArrayList<>();
+    }
+
+    void consult(Patient patient) {
+        patients.add(patient);
+        System.out.println("Dr. " + name + " consulting " + patient.getName());
+    }
+}
+
+class Patient {
+    private String name;
+    private List<Doctor> doctors;  // association — Patient knows about Doctors
+
+    Patient(String name) {
+        this.name = name;
+        this.doctors = new ArrayList<>();
+    }
+
+    void bookAppointment(Doctor doctor) {
+        doctors.add(doctor);
+        doctor.consult(this);
+    }
+
+    String getName() { return name; }
+}
+
+// Both exist independently
+Doctor doc = new Doctor("Smith", "Cardiology");
+Patient pat = new Patient("Alice");
+pat.bookAppointment(doc);
+// If we delete the Doctor object, the Patient still exists (and vice versa)
+```
+
+**Keyword clue:** If you can say *"X uses Y"* but neither creates or owns the other → **Association**.
+
+---
+
+#### 4.2.2 Aggregation (Weak "has-a")
+
+**The whole contains parts, but parts can exist independently.** If the container is destroyed, the parts survive.
+
+Think: *"X has Y, but Y can exist without X"*
+
+```java
+// A Department has Professors, but Professors can exist without the Department.
+// If CS Department is dissolved, Professors still exist — they can join another dept.
+
+class Professor {
+    private String name;
+    private String subject;
+
+    Professor(String name, String subject) {
+        this.name = name;
+        this.subject = subject;
+    }
+
+    String getName() { return name; }
+}
+
+class Department {
+    private String name;
+    private List<Professor> professors;  // aggregation — has professors, doesn't own them
+
+    Department(String name) {
+        this.name = name;
+        this.professors = new ArrayList<>();
+    }
+
+    // Professors are PASSED IN, not created here
+    void addProfessor(Professor professor) {
+        professors.add(professor);
+        System.out.println(professor.getName() + " joined " + name + " department");
+    }
+
+    void removeProfessor(Professor professor) {
+        professors.remove(professor);
+        // Professor still exists! Can join another department.
+    }
+}
+
+// Usage
+Professor prof = new Professor("Dr. Kumar", "Algorithms");
+
+Department cs = new Department("Computer Science");
+cs.addProfessor(prof);  // prof passed in — not created by Department
+
+cs = null; // Department destroyed
+// prof is still alive! → Aggregation
+```
+
+**How to spot it:** The container receives objects from outside (via constructor/method params). It does NOT create them.
+
+---
+
+#### 4.2.3 Composition (Strong "has-a")
+
+**The whole owns its parts completely.** Parts cannot exist without the whole. When the whole dies, the parts die too.
+
+Think: *"X owns Y. Y has no meaning without X."*
+
+```java
+// A House has Rooms. Rooms CANNOT exist without the House.
+// If the House is demolished, the Rooms are destroyed too.
+
+class Room {
+    private String name;
+    private double area;
+
+    Room(String name, double area) {
+        this.name = name;
+        this.area = area;
+    }
+
+    String getName() { return name; }
+}
+
+class House {
+    private String address;
+    private List<Room> rooms;  // composition — House CREATES and OWNS rooms
+
+    House(String address) {
+        this.address = address;
+        // Rooms are created INSIDE the House — they belong to it
+        this.rooms = new ArrayList<>();
+        this.rooms.add(new Room("Living Room", 300));  // created here
+        this.rooms.add(new Room("Bedroom", 200));      // created here
+        this.rooms.add(new Room("Kitchen", 150));       // created here
+    }
+
+    void addRoom(String name, double area) {
+        rooms.add(new Room(name, area));  // House controls creation
+    }
+
+    List<Room> getRooms() {
+        return Collections.unmodifiableList(rooms); // don't leak ownership
+    }
+
+    // When House is garbage collected, all Rooms go with it
+}
+
+// Usage
+House house = new House("123 Main St");
+// Rooms exist only within the House
+house = null; // House destroyed → all Rooms are destroyed too → Composition
+```
+
+**How to spot it:** The container creates objects internally (using `new` inside). Parts are never passed from outside.
+
+---
+
+#### Quick Decision Flow
+
+```
+Q: Can the part exist without the whole?
+│
+├─ YES → Q: Is it a simple usage / reference?
+│         ├─ YES → ASSOCIATION  (Doctor ↔ Patient)
+│         └─ NO  → AGGREGATION (Department → Professor)
+│
+└─ NO  → COMPOSITION (House → Room)
+```
+
+---
+
+#### Comparison in Code
+
+```java
+// All three relationships side by side
+
+class Order {
+    // COMPOSITION — Order CREATES and OWNS line items
+    // LineItems die when Order is deleted
+    private List<LineItem> items = new ArrayList<>();
+
+    // AGGREGATION — Order HAS a customer, but doesn't own them
+    // Customer exists independently
+    private Customer customer;  // passed in from outside
+
+    // ASSOCIATION — Order USES a payment gateway
+    // PaymentGateway is completely independent
+    private PaymentGateway gateway;
+
+    Order(Customer customer, PaymentGateway gateway) {
+        this.customer = customer;   // aggregation — received, not created
+        this.gateway = gateway;     // association — used, not owned
+    }
+
+    void addItem(String product, int qty, double price) {
+        items.add(new LineItem(product, qty, price));  // composition — created inside
+    }
+
+    void checkout() {
+        double total = items.stream()
+                           .mapToDouble(LineItem::getSubtotal)
+                           .sum();
+        gateway.charge(customer.getId(), total);  // association — just using it
+    }
+}
+
+class LineItem {
+    private String product;
+    private int quantity;
+    private double price;
+
+    LineItem(String product, int quantity, double price) {
+        this.product = product;
+        this.quantity = quantity;
+        this.price = price;
+    }
+
+    double getSubtotal() { return quantity * price; }
+}
+```
+
+---
+
+### 4.3 Interfaces vs Abstract Classes — When to Use Which
+
+| Aspect | Interface | Abstract Class |
+|--------|-----------|----------------|
+| **Purpose** | Define a **contract** (what) | Define a **partial implementation** (what + some how) |
+| **Multiple** | A class can implement **many** interfaces | A class can extend only **one** abstract class |
+| **State** | No instance fields (only constants) | Can have instance fields and constructors |
+| **Methods** | All abstract (+ default methods in Java 8+) | Mix of abstract + concrete methods |
+| **Relationship** | "CAN-DO" / capability | "IS-A" / identity |
+| **Examples** | `Serializable`, `Comparable`, `Runnable` | `InputStream`, `AbstractList`, `HttpServlet` |
+
+```java
+// ── When to use INTERFACE: Define a capability ──
+
+// Multiple unrelated classes can fly — it's a CAPABILITY, not identity
+interface Flyable {
+    void fly();
+}
+
+interface Swimmable {
+    void swim();
+}
+
+class Duck implements Flyable, Swimmable {  // can do both!
+    public void fly()  { System.out.println("Duck flying"); }
+    public void swim() { System.out.println("Duck swimming"); }
+}
+
+class Airplane implements Flyable {  // totally different class, same capability
+    public void fly() { System.out.println("Airplane flying"); }
+}
+```
+
+```java
+// ── When to use ABSTRACT CLASS: Shared identity + partial implementation ──
+
+// All notifications ARE notifications (identity) and share some common logic
+abstract class Notification {
+    protected String recipient;
+    protected LocalDateTime timestamp;
+
+    Notification(String recipient) {
+        this.recipient = recipient;
+        this.timestamp = LocalDateTime.now();  // shared state
+    }
+
+    // Shared behavior — all notifications have this
+    String getFormattedTimestamp() {
+        return timestamp.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm"));
+    }
+
+    // Template method — common workflow
+    void sendNotification(String message) {
+        validate();                              // shared step
+        String formatted = formatMessage(message); // subclass decides
+        deliver(formatted);                       // subclass decides
+        log(formatted);                           // shared step
+    }
+
+    private void validate() {
+        if (recipient == null || recipient.isEmpty())
+            throw new IllegalStateException("Recipient is required");
+    }
+
+    private void log(String message) {
+        System.out.println("[LOG " + getFormattedTimestamp() + "] Sent to " + recipient);
+    }
+
+    // Subclasses implement these differently
+    abstract String formatMessage(String message);
+    abstract void deliver(String formattedMessage);
+}
+
+class EmailNotification extends Notification {
+    EmailNotification(String email) { super(email); }
+
+    @Override
+    String formatMessage(String message) {
+        return "<html><body><h1>" + message + "</h1></body></html>";
+    }
+
+    @Override
+    void deliver(String formattedMessage) {
+        System.out.println("📧 Sending email to " + recipient + ": " + formattedMessage);
+    }
+}
+
+class SMSNotification extends Notification {
+    SMSNotification(String phone) { super(phone); }
+
+    @Override
+    String formatMessage(String message) {
+        return message.substring(0, Math.min(message.length(), 160)); // SMS limit
+    }
+
+    @Override
+    void deliver(String formattedMessage) {
+        System.out.println("📱 Sending SMS to " + recipient + ": " + formattedMessage);
+    }
+}
+```
+
+```java
+// ── Combining BOTH: Interface for contract + Abstract class for shared logic ──
+
+// Interface: defines the contract
+interface Searchable {
+    List<String> search(String query);
+}
+
+// Abstract class: partial implementation for database-backed search
+abstract class DatabaseSearchable implements Searchable {
+    protected Connection connection;
+
+    DatabaseSearchable(Connection connection) {
+        this.connection = connection;
+    }
+
+    // Shared logic
+    protected ResultSet executeQuery(String sql) {
+        // common DB query execution
+        return null;
+    }
+
+    // Subclasses just define the SQL
+    abstract String buildSearchQuery(String query);
+
+    @Override
+    public List<String> search(String query) {
+        String sql = buildSearchQuery(query);
+        ResultSet rs = executeQuery(sql);
+        return parseResults(rs);
+    }
+
+    private List<String> parseResults(ResultSet rs) {
+        // common parsing logic
+        return new ArrayList<>();
+    }
+}
+
+class UserSearch extends DatabaseSearchable {
+    UserSearch(Connection conn) { super(conn); }
+
+    @Override
+    String buildSearchQuery(String query) {
+        return "SELECT name FROM users WHERE name LIKE '%" + query + "%'";
+    }
+}
+
+class ProductSearch extends DatabaseSearchable {
+    ProductSearch(Connection conn) { super(conn); }
+
+    @Override
+    String buildSearchQuery(String query) {
+        return "SELECT title FROM products WHERE title LIKE '%" + query + "%'";
+    }
+}
+```
+
+#### Decision Cheat Sheet
+
+```
+Q: Are the classes related by IDENTITY (is-a) or CAPABILITY (can-do)?
+│
+├─ CAPABILITY → use INTERFACE
+│   "Can this thing fly? Can it be serialized? Can it be sorted?"
+│
+└─ IDENTITY → Q: Do they share implementation / state?
+              │
+              ├─ YES → ABSTRACT CLASS
+              │   "All notifications share timestamp, validation, logging"
+              │
+              └─ NO  → INTERFACE
+                  "They're the same kind of thing, but have nothing in common implementation-wise"
+```
+
+---
+
+### 4.4 Full Worked Example — Library Management System
+
+> **Problem:** *"Design a Library Management System where members can borrow and return books."*
+
+#### Step 1: Identify Entities (Nouns)
+
+```
+Library, Book, Member, Librarian, BookCopy, Loan, Fine, Catalog
+```
+
+#### Step 2: Identify Attributes & Methods
+
+```
+Book       → title, author, ISBN, genre           | getDetails()
+BookCopy   → copyId, book, status (AVAILABLE/BORROWED/RESERVED)
+Member     → memberId, name, email, activeLoans   | borrowBook(), returnBook()
+Librarian  → empId, name                          | addBook(), removeBook()
+Loan       → loanId, bookCopy, member, issueDate, dueDate, returnDate
+Fine       → amount, loan, paid                   | calculate(), pay()
+Catalog    → books                                | search(), addBook()
+```
+
+#### Step 3: Identify Relationships
+
+```
+Library  ◆── Catalog      (Composition — Catalog doesn't exist without Library)
+Library  ◆── BookCopy      (Composition — copies belong to this library)
+Catalog  ◆── Book          (Composition — Book entries owned by catalog)
+Book     ◇── BookCopy      (Aggregation — multiple copies per book)
+Member   ── Loan           (Association — member takes a loan)
+Loan     ◆── Fine          (Composition — fine belongs to the loan)
+BookCopy ── Loan           (Association — copy is lent via a loan)
+```
+
+#### Step 4: Code It
+
+```java
+// ── Enums ──
+enum BookStatus { AVAILABLE, BORROWED, RESERVED, LOST }
+enum Genre { FICTION, NON_FICTION, SCIENCE, HISTORY, TECHNOLOGY }
+
+// ── Core Entities ──
+
+class Book {
+    private String isbn;
+    private String title;
+    private String author;
+    private Genre genre;
+
+    Book(String isbn, String title, String author, Genre genre) {
+        this.isbn = isbn;
+        this.title = title;
+        this.author = author;
+        this.genre = genre;
+    }
+
+    // getters...
+    String getIsbn()  { return isbn; }
+    String getTitle() { return title; }
+    String getAuthor(){ return author; }
+}
+
+class BookCopy {
+    private String copyId;
+    private Book book;                // aggregation — refers to a Book
+    private BookStatus status;
+
+    BookCopy(String copyId, Book book) {
+        this.copyId = copyId;
+        this.book = book;
+        this.status = BookStatus.AVAILABLE;
+    }
+
+    boolean isAvailable() { return status == BookStatus.AVAILABLE; }
+
+    void markBorrowed()  { this.status = BookStatus.BORROWED; }
+    void markAvailable() { this.status = BookStatus.AVAILABLE; }
+    void markLost()      { this.status = BookStatus.LOST; }
+
+    Book getBook()       { return book; }
+    String getCopyId()   { return copyId; }
+}
+
+// ── Loan (tracks borrowing) ──
+
+class Loan {
+    private String loanId;
+    private BookCopy bookCopy;         // association
+    private Member member;             // association
+    private LocalDate issueDate;
+    private LocalDate dueDate;
+    private LocalDate returnDate;
+    private Fine fine;                 // composition — fine belongs to this loan
+
+    Loan(String loanId, BookCopy bookCopy, Member member, int loanDays) {
+        this.loanId = loanId;
+        this.bookCopy = bookCopy;
+        this.member = member;
+        this.issueDate = LocalDate.now();
+        this.dueDate = issueDate.plusDays(loanDays);
+    }
+
+    boolean isOverdue() {
+        return returnDate == null && LocalDate.now().isAfter(dueDate);
+    }
+
+    void returnBook() {
+        this.returnDate = LocalDate.now();
+        bookCopy.markAvailable();
+
+        if (returnDate.isAfter(dueDate)) {
+            long overdueDays = ChronoUnit.DAYS.between(dueDate, returnDate);
+            this.fine = new Fine(overdueDays * 5.0); // ₹5 per day — composition
+        }
+    }
+
+    Fine getFine()          { return fine; }
+    BookCopy getBookCopy()  { return bookCopy; }
+    String getLoanId()      { return loanId; }
+}
+
+class Fine {
+    private double amount;
+    private boolean paid;
+
+    Fine(double amount) {
+        this.amount = amount;
+        this.paid = false;
+    }
+
+    double getAmount() { return amount; }
+    boolean isPaid()   { return paid; }
+
+    void pay() {
+        this.paid = true;
+        System.out.println("💰 Fine of ₹" + amount + " paid");
+    }
+}
+
+// ── Users (using abstract class — shared identity) ──
+
+abstract class User {
+    protected String id;
+    protected String name;
+    protected String email;
+
+    User(String id, String name, String email) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+    }
+
+    String getName() { return name; }
+}
+
+// ── Member ──
+
+class Member extends User {
+    private static final int MAX_BOOKS = 5;
+    private static final int LOAN_PERIOD_DAYS = 14;
+
+    private List<Loan> activeLoans;
+
+    Member(String id, String name, String email) {
+        super(id, name, email);
+        this.activeLoans = new ArrayList<>();
+    }
+
+    Loan borrowBook(BookCopy copy) {
+        if (activeLoans.size() >= MAX_BOOKS) {
+            throw new IllegalStateException("Max borrow limit reached (" + MAX_BOOKS + ")");
+        }
+        if (!copy.isAvailable()) {
+            throw new IllegalStateException("Book copy not available");
+        }
+
+        copy.markBorrowed();
+        Loan loan = new Loan("LOAN-" + System.currentTimeMillis(), copy, this, LOAN_PERIOD_DAYS);
+        activeLoans.add(loan);
+        System.out.println("📖 " + name + " borrowed: " + copy.getBook().getTitle());
+        return loan;
+    }
+
+    void returnBook(Loan loan) {
+        loan.returnBook();
+        activeLoans.remove(loan);
+        System.out.println("📚 " + name + " returned: " + loan.getBookCopy().getBook().getTitle());
+
+        if (loan.getFine() != null) {
+            System.out.println("⚠️ Fine due: ₹" + loan.getFine().getAmount());
+        }
+    }
+
+    int getActiveLoansCount() { return activeLoans.size(); }
+}
+
+// ── Librarian ──
+
+class Librarian extends User {
+    Librarian(String id, String name, String email) {
+        super(id, name, email);
+    }
+
+    void addBook(Catalog catalog, Book book) {
+        catalog.addBook(book);
+        System.out.println("📚 Librarian " + name + " added: " + book.getTitle());
+    }
+}
+
+// ── Catalog (search & manage books) ──
+
+class Catalog {
+    private Map<String, Book> booksByIsbn;     // composition — catalog owns books
+    private List<BookCopy> allCopies;          // composition — library owns copies
+
+    Catalog() {
+        this.booksByIsbn = new HashMap<>();
+        this.allCopies = new ArrayList<>();
+    }
+
+    void addBook(Book book) {
+        booksByIsbn.put(book.getIsbn(), book);
+    }
+
+    BookCopy addCopy(Book book) {
+        BookCopy copy = new BookCopy("COPY-" + (allCopies.size() + 1), book);
+        allCopies.add(copy);
+        return copy;
+    }
+
+    List<Book> searchByTitle(String keyword) {
+        return booksByIsbn.values().stream()
+                .filter(b -> b.getTitle().toLowerCase().contains(keyword.toLowerCase()))
+                .collect(Collectors.toList());
+    }
+
+    List<Book> searchByAuthor(String author) {
+        return booksByIsbn.values().stream()
+                .filter(b -> b.getAuthor().toLowerCase().contains(author.toLowerCase()))
+                .collect(Collectors.toList());
+    }
+
+    BookCopy findAvailableCopy(String isbn) {
+        return allCopies.stream()
+                .filter(c -> c.getBook().getIsbn().equals(isbn) && c.isAvailable())
+                .findFirst()
+                .orElse(null);
+    }
+}
+
+// ── Library (top-level — composes everything) ──
+
+class Library {
+    private String name;
+    private Catalog catalog;            // composition
+
+    Library(String name) {
+        this.name = name;
+        this.catalog = new Catalog();   // created inside — composition
+    }
+
+    Catalog getCatalog() { return catalog; }
+
+    void displayInfo() {
+        System.out.println("🏛️ Welcome to " + name);
+    }
+}
+```
+
+#### Step 5: Putting It All Together
+
+```java
+// Full usage scenario
+Library library = new Library("City Central Library");
+library.displayInfo();
+
+Librarian librarian = new Librarian("LIB-001", "Priya", "priya@library.com");
+
+// Add books
+Book b1 = new Book("978-0-13-468599-1", "Clean Code", "Robert C. Martin", Genre.TECHNOLOGY);
+Book b2 = new Book("978-0-20-163361-0", "Design Patterns", "Gang of Four", Genre.TECHNOLOGY);
+
+librarian.addBook(library.getCatalog(), b1);
+librarian.addBook(library.getCatalog(), b2);
+
+// Add copies
+BookCopy copy1 = library.getCatalog().addCopy(b1);
+BookCopy copy2 = library.getCatalog().addCopy(b1);  // second copy
+BookCopy copy3 = library.getCatalog().addCopy(b2);
+
+// Member borrows
+Member member = new Member("MEM-001", "Rahul", "rahul@email.com");
+Loan loan = member.borrowBook(copy1);
+// 📖 Rahul borrowed: Clean Code
+
+// Member returns
+member.returnBook(loan);
+// 📚 Rahul returned: Clean Code
+
+// Search
+List<Book> results = library.getCatalog().searchByAuthor("Martin");
+// → [Clean Code]
+```
+
+---
+
+### 🧠 Class Design Thought Process Checklist
+
+Use this every time you get a *"Design X"* question:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                 CLASS DESIGN CHECKLIST                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. IDENTIFY ENTITIES                                               │
+│     □ Underline nouns in the problem statement                      │
+│     □ Filter out duplicates and non-essential ones                  │
+│     □ Each noun = potential class                                   │
+│                                                                     │
+│  2. DEFINE ATTRIBUTES                                               │
+│     □ What data does each entity hold?                              │
+│     □ Use proper types (enum for fixed values, etc.)                │
+│     □ Make fields private (encapsulation!)                          │
+│                                                                     │
+│  3. DEFINE METHODS                                                  │
+│     □ What can each entity DO?                                      │
+│     □ Verbs → methods                                               │
+│     □ Keep methods focused (SRP)                                    │
+│                                                                     │
+│  4. ESTABLISH RELATIONSHIPS                                         │
+│     □ Association → uses / knows about                              │
+│     □ Aggregation → has-a (shared, independent lifecycle)           │
+│     □ Composition → has-a (owned, dependent lifecycle)              │
+│                                                                     │
+│  5. CHOOSE ABSTRACTIONS                                             │
+│     □ Shared identity + implementation → Abstract Class             │
+│     □ Shared capability / contract → Interface                      │
+│     □ Can combine both                                              │
+│                                                                     │
+│  6. APPLY PATTERNS (if needed)                                      │
+│     □ Multiple algorithms → Strategy                                │
+│     □ Notifications → Observer                                      │
+│     □ State transitions → State                                     │
+│     □ Object creation logic → Factory                               │
+│     □ Single instance → Singleton                                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
