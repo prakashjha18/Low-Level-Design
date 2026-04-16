@@ -16,6 +16,7 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
 | 7 | [Data Structures in Design](#️-7-data-structures-in-design) | HashMap, List vs Set, PriorityQueue, Queue, LRU Cache |
 | 8 | [Scalability Thinking](#️-8-scalability-thinking-light-not-hld-level) | Extensibility, Large Data, Thread Safety |
 | 9 | [Edge Cases & Constraints](#-9-edge-cases--constraints) | Null Handling, Input Validation, Concurrency, Capacity Limits, Defensive Coding |
+| 10 | [Communication](#️-10-communication) | Clarifying Questions, Explaining Design, Evolving Design, Time Management |
 
 ### Detailed Index
 
@@ -73,6 +74,12 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
   - [9.4 Capacity Limits](#94-capacity-limits)
   - [9.5 Defensive Coding Patterns](#95-defensive-coding-patterns)
   - [9.6 Edge Cases by System Type](#96-edge-cases-by-system-type)
+- **10. Communication**
+  - [10.1 Clarifying Questions](#101-asking-clarifying-questions--do-this-first)
+  - [10.2 Explaining Your Design](#102-explaining-your-design-clearly)
+  - [10.3 Evolving Your Design](#103-evolving-your-design-live)
+  - [10.4 Time Management](#104-time-management--the-45-minute-framework)
+  - [10.5 Common Mistakes](#105-common-communication-mistakes)
 
 ### 📂 Implementations
 
@@ -4483,6 +4490,291 @@ final class Money {
 │  "What are the constraints of this system?"                         │
 │  - Max users? Max items? Max concurrent operations?                 │
 │  - This shows maturity and thoroughness.                            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🗣️ 10. Communication
+
+> They don't just evaluate your code — they evaluate how you **think out loud**.
+> A candidate with decent code but great communication beats a silent coder with perfect code.
+
+---
+
+### 10.1 Asking Clarifying Questions — Do This FIRST
+
+**Before writing a single line of code, spend 2-3 minutes asking questions.** This shows maturity, thoroughness, and real-world engineering thinking.
+
+#### The question framework
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│         CLARIFYING QUESTIONS FRAMEWORK (Ask in this order)          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. SCOPE — What's in, what's out?                                  │
+│     "Should I design the full system or focus on core features?"   │
+│     "Do we need user authentication or just the core logic?"       │
+│                                                                     │
+│  2. USERS — Who uses this and how many?                             │
+│     "Is this single-user or multi-user?"                           │
+│     "How many concurrent users should I consider?"                 │
+│                                                                     │
+│  3. CONSTRAINTS — What are the limits?                              │
+│     "Max capacity? (floors, spots, books, items)"                  │
+│     "Any time constraints? (booking window, expiry)"               │
+│                                                                     │
+│  4. CORE USE CASES — What must work?                                │
+│     "What are the top 3 actions a user performs?"                  │
+│     "Any edge cases you specifically want me to handle?"           │
+│                                                                     │
+│  5. ASSUMPTIONS — State them explicitly                             │
+│     "I'm assuming single-threaded for now — is that okay?"         │
+│     "I'll use in-memory storage, not a database — sound good?"     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Example — Parking Lot System
+
+```
+❌ Bad: *immediately starts coding ParkingLot class*
+
+✅ Good:
+
+You: "Before I start, a few questions:
+  1. How many floors and spots are we talking about?
+  2. What vehicle types — bikes, cars, trucks? Anything else?
+  3. Is pricing based on time, flat rate, or vehicle type?
+  4. Do we need to handle multiple entry/exit gates?
+  5. Should I worry about concurrent access for now?"
+
+Interviewer: "2-3 floors, ~100 spots, bikes and cars, hourly pricing,
+              single gate is fine, no concurrency needed."
+
+You: "Great. I'll assume:
+  - Single-threaded, in-memory storage
+  - Hourly pricing with different rates per vehicle type
+  - One entry and one exit point
+  Let me start with the core entities..."
+```
+
+**Why this matters:** Interviewers intentionally leave requirements vague to see if you'll clarify. Jumping straight into code signals inexperience.
+
+---
+
+### 10.2 Explaining Your Design Clearly
+
+#### The top-down explanation pattern
+
+```
+Level 1: HIGH-LEVEL OVERVIEW (30 seconds)
+  "The system has these main components: X, Y, Z.
+   X handles ___, Y handles ___, Z handles ___."
+
+Level 2: ENTITY IDENTIFICATION (1-2 minutes)
+  "The core entities are: [list classes].
+   Here's how they relate: [describe relationships]."
+
+Level 3: DEEP DIVE into critical parts (bulk of time)
+  "Let me walk through the most interesting part — [core algorithm/pattern].
+   I'm using [pattern] because [reason]."
+```
+
+#### Example script — explaining a Vending Machine design
+
+```
+"Let me walk you through my design:
+
+[Level 1 — Overview]
+The system has 4 main pieces: the VendingMachine itself, an Inventory
+that manages products and stock, a set of State classes that control
+the machine's behavior, and Coin/Product value objects.
+
+[Level 2 — Entities & Relationships]
+VendingMachine composes an Inventory — the inventory only exists within
+the machine. The machine delegates all behavior to the current State
+object. This is the State Pattern.
+
+[Level 3 — Deep Dive]
+The three states are Idle, HasMoney, and Dispensing. When a user
+inserts a coin, the machine transitions from Idle to HasMoney. When
+they select a valid product with enough balance, it moves to Dispensing.
+After dispensing, it auto-returns to Idle.
+
+The key insight is: the machine itself has ZERO if-else checks for state.
+All behavior is encapsulated in the state classes. This means adding a
+new state — say, MaintenanceMode — requires just one new class with
+zero changes to existing code. That's the Open/Closed Principle in action."
+```
+
+#### Phrases that impress interviewers
+
+| Instead of... | Say... |
+|--------------|--------|
+| "I'll use a Map" | "I'm using a HashMap here for O(1) lookup by ticket ID" |
+| "I'll add a class" | "I'll create a Strategy interface so we can swap algorithms at runtime" |
+| "This handles errors" | "I'm validating inputs at the boundary — fail fast with specific exceptions" |
+| "I used inheritance" | "I used composition over inheritance here because the relationship is HAS-A, not IS-A" |
+| "It's flexible" | "It follows OCP — adding a new payment method requires only a new class, no modifications" |
+
+---
+
+### 10.3 Evolving Your Design Live
+
+Interviewers will throw curveballs. This is **not** a trap — it's a test of how you adapt.
+
+#### The evolve-gracefully pattern
+
+```
+Step 1: ACKNOWLEDGE the new requirement
+  "Good question — that changes the design."
+
+Step 2: IDENTIFY what's affected
+  "This impacts [class/module]. The rest stays the same."
+
+Step 3: PROPOSE a solution
+  "I'd handle this by [approach]. Here's why..."
+
+Step 4: SHOW it doesn't break existing code
+  "Notice that the existing [class] doesn't change — we're
+   just adding a new [class/strategy/observer]."
+```
+
+#### Example curveballs and responses
+
+**Curveball 1:** *"What if we need to add a new payment method — cryptocurrency?"*
+
+```
+"Great question. Because I used the Strategy Pattern for payment,
+this is straightforward:
+
+1. Create a new CryptoPayment class that implements PaymentStrategy
+2. Add it to the factory or inject it — no existing code changes
+3. The ShoppingCart's checkout method doesn't know or care what
+   payment method is used.
+
+That's the beauty of Strategy — the algorithm varies independently
+from the client."
+```
+
+**Curveball 2:** *"What if the parking lot needs VIP reserved spots?"*
+
+```
+"I'd extend this in two ways:
+
+1. Add a SpotType enum: REGULAR, VIP, HANDICAPPED
+2. Update the spot search to filter by type
+3. Possibly add a VIPFeeStrategy if pricing differs
+
+The ParkingLot, Ticket, and Vehicle classes stay unchanged.
+The new feature is purely additive."
+```
+
+**Curveball 3:** *"What if we need to log every action for auditing?"*
+
+```
+"I'd use the Decorator Pattern:
+
+- Create an AuditedParkingService that wraps the existing ParkingService
+- The decorator logs before and after each method call
+- Zero changes to the original ParkingService — OCP satisfied
+
+This is the same pattern Java's I/O streams use —
+BufferedInputStream decorates FileInputStream."
+```
+
+---
+
+### 10.4 Time Management — The 45-Minute Framework
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│          LLD INTERVIEW — 45 MINUTE BREAKDOWN                     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  [0-5 min]   🎯 CLARIFY                                         │
+│  • Ask clarifying questions                                      │
+│  • State assumptions                                             │
+│  • Agree on scope (don't overcommit!)                            │
+│                                                                  │
+│  [5-10 min]  📋 IDENTIFY ENTITIES                                │
+│  • List core classes                                             │
+│  • Draw quick relationships                                      │
+│  • Identify patterns needed                                      │
+│                                                                  │
+│  [10-30 min] 💻 CODE THE CORE                                   │
+│  • Start with interfaces/abstractions                            │
+│  • Implement the main flow                                       │
+│  • Apply patterns (Strategy, Observer, State)                    │
+│  • Talk while you code!                                          │
+│                                                                  │
+│  [30-40 min] 🔧 HANDLE EDGE CASES                               │
+│  • Add validation                                                │
+│  • Discuss concurrency (at least acknowledge it)                 │
+│  • Handle error scenarios                                        │
+│                                                                  │
+│  [40-45 min] 🔄 EVOLVE & DISCUSS                                │
+│  • Handle interviewer's follow-up questions                      │
+│  • Discuss extensibility                                         │
+│  • Mention what you'd add with more time                         │
+│                                                                  │
+│  💡 PRO TIP: Don't try to build everything.                      │
+│  A clean, extensible core > a bloated, messy complete solution.  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 10.5 Common Communication Mistakes
+
+| ❌ Mistake | ✅ Fix |
+|-----------|--------|
+| **Silent coding** — typing without explaining | **Think aloud** — narrate your thought process |
+| **Jumping into code immediately** | **Spend 3-5 min** clarifying requirements first |
+| **Over-engineering** — trying to build everything | **Focus on core** — mention extras verbally |
+| **Not asking questions** — making assumptions silently | **State assumptions** explicitly: "I'm assuming X, is that okay?" |
+| **Getting stuck and freezing** | **Say it:** "I'm thinking through the trade-offs between A and B..." |
+| **Defending bad decisions** when questioned | **Adapt:** "Good point — let me refactor this to use Strategy instead" |
+| **Using jargon without explaining** | **Connect to why:** "I'm using Observer pattern — so we can add new notification channels without modifying existing code" |
+| **Not discussing trade-offs** | **Always mention:** "I chose X over Y because [reason], but the trade-off is [downside]" |
+
+---
+
+### 🎯 The Golden Communication Rules
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│           COMMUNICATION GOLDEN RULES                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. CLARIFY BEFORE CODING                                           │
+│     "What are the key use cases and constraints?"                  │
+│     3-5 minutes of questions > 45 minutes of wrong code.           │
+│                                                                     │
+│  2. THINK OUT LOUD                                                  │
+│     "I'm considering using Strategy here because..."               │
+│     Silence makes interviewers nervous. Narrate your thinking.     │
+│                                                                     │
+│  3. JUSTIFY EVERY CHOICE                                            │
+│     "I picked HashMap for O(1) lookup by ID."                      │
+│     "I used interface here because multiple unrelated classes      │
+│      need this capability."                                        │
+│                                                                     │
+│  4. EVOLVE GRACEFULLY                                               │
+│     When requirements change: acknowledge → identify impact →      │
+│     propose solution → show existing code is untouched.            │
+│                                                                     │
+│  5. STATE TRADE-OFFS                                                │
+│     "synchronized is simple but could bottleneck. With more time,  │
+│      I'd use per-type locking for better concurrency."             │
+│                                                                     │
+│  6. KNOW WHEN TO STOP                                               │
+│     A clean core with good design > a complete mess.               │
+│     "With more time, I'd add [X, Y, Z]."                          │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
