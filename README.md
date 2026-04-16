@@ -2421,3 +2421,526 @@ Use this every time you get a *"Design X"* question:
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🔄 6. API & Method Design
+
+> Interviewers care a LOT about naming clarity. A well-named method is self-documenting code.
+
+Your public methods ARE your API. In an LLD interview, the method signatures you write
+reveal how you **think** — clean signatures = clean thinking.
+
+---
+
+### 6.1 Clean Method Signatures — The Rules
+
+#### Rule 1: Method name = verb + noun (what it does)
+
+```java
+// ❌ Bad: vague, unclear
+void process(Object o);
+void handle(String s);
+void doStuff();
+int calc(int a, int b);
+void data(User u);
+
+// ✅ Good: reads like English
+boolean parkVehicle(Vehicle vehicle);
+double calculateFare(Ticket ticket);
+void sendNotification(User user, String message);
+List<Product> searchByCategory(String category);
+Order placeOrder(Cart cart, PaymentMethod payment);
+```
+
+**Naming conventions:**
+
+| Action | Verb Pattern | Example |
+|--------|-------------|---------|
+| Create | `create`, `add`, `register` | `createUser(String name)` |
+| Read | `get`, `find`, `fetch`, `search` | `findAvailableSpot(VehicleType type)` |
+| Update | `update`, `set`, `modify` | `updateOrderStatus(String orderId, Status status)` |
+| Delete | `delete`, `remove`, `cancel` | `cancelReservation(String reservationId)` |
+| Check | `is`, `has`, `can`, `exists` | `isAvailable()`, `hasPermission(User user)` |
+| Convert | `to`, `from`, `parse` | `toDTO()`, `fromEntity(UserEntity entity)` |
+
+---
+
+#### Rule 2: Return type tells the caller what to expect
+
+```java
+// ❌ Bad: void when the caller needs feedback
+void parkVehicle(Vehicle vehicle);
+// Did it work? Which spot? The caller has no idea.
+
+// ✅ Good: return meaningful result
+Ticket parkVehicle(Vehicle vehicle);
+// Returns a Ticket on success — caller knows the spot, entry time, etc.
+
+// ✅ Also good: return boolean for simple success/failure
+boolean cancelBooking(String bookingId);
+
+// ✅ For search operations: return a List (never null)
+List<Product> searchProducts(String keyword);
+// Empty list = no results (not null!)
+
+// ✅ For lookups: use Optional to signal "might not exist"
+Optional<User> findUserById(String userId);
+// Forces the caller to handle the absent case
+```
+
+**Return type decision guide:**
+
+| Scenario | Return Type | Why |
+|----------|------------|-----|
+| Action that produces something | The produced object (`Ticket`, `Order`) | Caller needs the result |
+| Simple success/failure | `boolean` | Clean and obvious |
+| Lookup (may not exist) | `Optional<T>` | No null surprises |
+| Search (zero or more) | `List<T>` | Never return null — return empty list |
+| Action with no meaningful result | `void` | Only when caller truly doesn't need feedback |
+
+---
+
+#### Rule 3: Parameters should be specific, not generic
+
+```java
+// ❌ Bad: too many primitive params — "Primitive Obsession" smell
+void createUser(String name, String email, int age, String phone, String address, boolean isActive);
+// What order are they in? Easy to mix up String params.
+
+// ✅ Good: wrap related params in an object
+void createUser(UserRegistrationRequest request);
+
+class UserRegistrationRequest {
+    private String name;
+    private String email;
+    private int age;
+    private String phone;
+    private String address;
+    // validation inside constructor
+}
+```
+
+```java
+// ❌ Bad: boolean params — "what does true mean here?"
+void sendNotification(String message, boolean urgent, boolean retry);
+// sendNotification("Hello", true, false) — unreadable at call site
+
+// ✅ Good: use enums or separate methods
+void sendNotification(String message, Priority priority, RetryPolicy retryPolicy);
+// sendNotification("Hello", Priority.URGENT, RetryPolicy.NO_RETRY) — crystal clear
+
+// ✅ Or split into separate methods if behavior differs significantly
+void sendUrgentNotification(String message);
+void sendNotification(String message);
+```
+
+**Parameter design rules:**
+
+| Guideline | Why |
+|-----------|-----|
+| Max 3-4 params per method | More than that → use a request/config object |
+| No boolean params | Use enums or separate methods instead |
+| Most specific type possible | `VehicleType` not `String`, `Coin` not `int` |
+| Required params first, optional later | Natural reading order |
+| Avoid `null` params | Use overloaded methods or Optional |
+
+---
+
+### 6.2 Naming — The Art of Self-Documenting Code
+
+#### Class naming
+
+```java
+// ❌ Bad class names
+class Manager;          // Manager of what?
+class Data;             // What data?
+class Helper;           // Helps with what?
+class Processor;        // Too generic
+class Info;             // Useless suffix
+
+// ✅ Good class names
+class ParkingLotManager;    // specific
+class UserRepository;       // clear responsibility
+class PaymentProcessor;     // combined with context, it's clear
+class NotificationService;
+class TicketGenerator;
+```
+
+#### Method naming for different patterns
+
+```java
+// ── Factory methods ──
+static Notification create(String type);          // ✅ Factory
+static User fromDTO(UserDTO dto);                 // ✅ Conversion factory
+static ParkingSpot of(int floor, int spotNumber); // ✅ Named constructor
+
+// ── Boolean methods (always start with is/has/can/should) ──
+boolean isAvailable();
+boolean hasActiveSubscription();
+boolean canAccommodate(VehicleType type);
+boolean shouldRetry(int attemptCount);
+
+// ── Lifecycle methods ──
+void initialize();
+void start();
+void stop();
+void shutdown();
+void dispose();  // cleanup resources
+
+// ── Collection methods ──
+void add(Item item);          // add single
+void addAll(List<Item> items); // add multiple
+void remove(Item item);
+void clear();
+int size();
+boolean isEmpty();
+boolean contains(Item item);
+```
+
+---
+
+### 6.3 Input/Output Clarity
+
+#### Use DTOs / Request-Response objects for complex APIs
+
+```java
+// ❌ Bad: raw types, unclear what's returned
+Map<String, Object> checkout(String userId, List<String> itemIds, String paymentType, String coupon);
+// What's in the Map? Nobody knows without reading the implementation.
+
+// ✅ Good: typed request and response
+class CheckoutRequest {
+    private final String userId;
+    private final List<String> itemIds;
+    private final PaymentMethod paymentMethod;
+    private final String couponCode;  // nullable — optional
+
+    // constructor with validation...
+}
+
+class CheckoutResponse {
+    private final String orderId;
+    private final double totalAmount;
+    private final double discount;
+    private final double finalAmount;
+    private final PaymentStatus paymentStatus;
+    private final LocalDateTime estimatedDelivery;
+
+    // constructor + getters
+}
+
+// Clean API
+CheckoutResponse checkout(CheckoutRequest request);
+// Caller knows EXACTLY what goes in and what comes out
+```
+
+#### Use enums instead of magic strings/numbers
+
+```java
+// ❌ Bad: magic strings
+void setStatus(String status);     // "active"? "ACTIVE"? "Active"? "1"?
+void setPriority(int priority);    // 1=high? 0=high? Who knows?
+
+// ✅ Good: enum restricts to valid values
+enum OrderStatus { NEW, CONFIRMED, SHIPPED, DELIVERED, CANCELLED }
+enum Priority { LOW, MEDIUM, HIGH, CRITICAL }
+
+void setStatus(OrderStatus status);
+void setPriority(Priority priority);
+// Impossible to pass an invalid value — compile-time safety
+```
+
+---
+
+### 6.4 Handling Edge Cases
+
+Every method should consider: *"What could go wrong?"*
+
+```java
+// ── A well-designed method handles ALL edge cases ──
+
+public class ParkingLot {
+
+    /**
+     * Parks a vehicle in the first available spot.
+     *
+     * @param vehicle the vehicle to park (must not be null)
+     * @return Ticket for the parked vehicle
+     * @throws IllegalArgumentException if vehicle is null
+     * @throws ParkingFullException if no spots are available for this vehicle type
+     * @throws DuplicateVehicleException if vehicle is already parked
+     */
+    public Ticket parkVehicle(Vehicle vehicle) {
+        // 1. Null check
+        if (vehicle == null) {
+            throw new IllegalArgumentException("Vehicle cannot be null");
+        }
+
+        // 2. Duplicate check
+        if (isAlreadyParked(vehicle.getLicensePlate())) {
+            throw new DuplicateVehicleException(
+                "Vehicle " + vehicle.getLicensePlate() + " is already parked"
+            );
+        }
+
+        // 3. Availability check
+        ParkingSpot spot = findAvailableSpot(vehicle.getType());
+        if (spot == null) {
+            throw new ParkingFullException(
+                "No available spots for " + vehicle.getType()
+            );
+        }
+
+        // 4. Happy path
+        spot.park(vehicle);
+        Ticket ticket = new Ticket(generateTicketId(), vehicle, spot);
+        activeTickets.put(ticket.getTicketId(), ticket);
+
+        return ticket;
+    }
+
+    /**
+     * Unparks a vehicle and calculates the fee.
+     *
+     * @param ticketId the ticket ID from parking
+     * @return Payment receipt with fee details
+     * @throws IllegalArgumentException if ticketId is null or empty
+     * @throws TicketNotFoundException if ticket doesn't exist
+     * @throws TicketAlreadyUsedException if vehicle already unparked
+     */
+    public PaymentReceipt unparkVehicle(String ticketId) {
+        // 1. Input validation
+        if (ticketId == null || ticketId.isBlank()) {
+            throw new IllegalArgumentException("Ticket ID cannot be null or empty");
+        }
+
+        // 2. Existence check
+        Ticket ticket = activeTickets.get(ticketId);
+        if (ticket == null) {
+            throw new TicketNotFoundException("Ticket " + ticketId + " not found");
+        }
+
+        // 3. State check
+        if (ticket.isUsed()) {
+            throw new TicketAlreadyUsedException("Ticket " + ticketId + " already used");
+        }
+
+        // 4. Happy path
+        ParkingSpot spot = ticket.getSpot();
+        spot.unpark();
+        ticket.markUsed();
+
+        double fee = feeCalculator.calculate(ticket);
+        return new PaymentReceipt(ticket, fee);
+    }
+}
+```
+
+#### Edge case checklist
+
+```
+┌───────────────────────────────────────────────────────────┐
+│              EDGE CASE CHECKLIST                          │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  INPUT VALIDATION                                         │
+│  □ Null check — reject null params early                  │
+│  □ Empty check — empty strings, empty collections         │
+│  □ Range check — negative amounts, zero quantities        │
+│  □ Format check — invalid email, malformed ID             │
+│                                                           │
+│  STATE VALIDATION                                         │
+│  □ Duplicate check — entity already exists                │
+│  □ Not found — entity doesn't exist                       │
+│  □ Wrong state — e.g., cancelling a delivered order       │
+│  □ Concurrent modification — two users same resource      │
+│                                                           │
+│  BUSINESS RULES                                           │
+│  □ Capacity — parking full, max loans reached             │
+│  □ Permissions — user not authorized                      │
+│  □ Limits — max items in cart, max withdraw amount        │
+│  □ Timeout — reservation expired                          │
+│                                                           │
+│  OUTPUT                                                   │
+│  □ Never return null for collections (return empty list)  │
+│  □ Use Optional for single lookups                        │
+│  □ Return meaningful objects, not void                    │
+│  □ Custom exceptions with descriptive messages            │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 6.5 Custom Exceptions — Not Just `RuntimeException`
+
+```java
+// ❌ Bad: generic exceptions — caller doesn't know what went wrong
+throw new RuntimeException("Error");
+throw new Exception("Something failed");
+
+// ✅ Good: custom exceptions organized by domain
+
+// Base exception for the parking domain
+class ParkingException extends RuntimeException {
+    ParkingException(String message) { super(message); }
+}
+
+// Specific exceptions
+class ParkingFullException extends ParkingException {
+    private final VehicleType vehicleType;
+
+    ParkingFullException(VehicleType type) {
+        super("No available spots for " + type);
+        this.vehicleType = type;
+    }
+
+    public VehicleType getVehicleType() { return vehicleType; }
+}
+
+class TicketNotFoundException extends ParkingException {
+    TicketNotFoundException(String ticketId) {
+        super("Ticket not found: " + ticketId);
+    }
+}
+
+class DuplicateVehicleException extends ParkingException {
+    DuplicateVehicleException(String plate) {
+        super("Vehicle already parked: " + plate);
+    }
+}
+
+// Now the caller can handle specific failures:
+try {
+    Ticket ticket = parkingLot.parkVehicle(myCar);
+} catch (ParkingFullException e) {
+    System.out.println("Try another parking lot");
+} catch (DuplicateVehicleException e) {
+    System.out.println("Your car is already here!");
+}
+```
+
+---
+
+### 6.6 Full Before/After — Parking Lot API Refactored
+
+#### ❌ BEFORE (poor API design)
+
+```java
+class ParkingLot {
+    // Vague name, returns int (what does -1 mean?), takes String instead of enum
+    int park(String type, String plate) {
+        if (type == null) return -1;
+        // ... messy if-else
+        return spotNumber; // or -1 on failure
+    }
+
+    // What does the double[] contain? Who knows.
+    double[] unpark(int spotNumber) {
+        // returns {hours, fee} ... or null on error
+        return new double[]{hours, fee};
+    }
+
+    // Boolean but no details on failure
+    boolean checkAvailability(String type) {
+        // ...
+    }
+}
+```
+
+#### ✅ AFTER (clean API design)
+
+```java
+class ParkingLot {
+    /**
+     * Parks a vehicle and returns a ticket.
+     * @throws ParkingFullException if no spots available
+     * @throws DuplicateVehicleException if vehicle already parked
+     */
+    Ticket parkVehicle(Vehicle vehicle) { ... }
+
+    /**
+     * Unparks a vehicle and returns a detailed payment receipt.
+     * @throws TicketNotFoundException if ticket is invalid
+     */
+    PaymentReceipt unparkVehicle(String ticketId) { ... }
+
+    /**
+     * Returns the number of available spots for a vehicle type.
+     */
+    int getAvailableSpotCount(VehicleType type) { ... }
+
+    /**
+     * Checks if at least one spot is available for the given type.
+     */
+    boolean hasAvailableSpot(VehicleType type) { ... }
+
+    /**
+     * Returns all currently active (unpaid) tickets.
+     */
+    List<Ticket> getActiveTickets() { ... }
+}
+
+// Supporting types — everything is typed, not String/int/double[]
+class Ticket {
+    private final String ticketId;
+    private final Vehicle vehicle;
+    private final ParkingSpot spot;
+    private final LocalDateTime entryTime;
+}
+
+class PaymentReceipt {
+    private final Ticket ticket;
+    private final Duration duration;
+    private final double fee;
+    private final LocalDateTime exitTime;
+}
+```
+
+**What changed:**
+| Aspect | Before | After |
+|--------|--------|-------|
+| Method names | `park()`, `unpark()` | `parkVehicle()`, `unparkVehicle()` |
+| Parameters | `String type, String plate` | `Vehicle vehicle` (typed) |
+| Return types | `int`, `double[]`, `null` | `Ticket`, `PaymentReceipt`, `List<>` |
+| Error handling | Return `-1` or `null` | Custom exceptions with messages |
+| Discoverability | Need to read implementation | Self-documenting signatures |
+
+---
+
+### 🎯 Method Design Golden Rules
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                 METHOD DESIGN GOLDEN RULES                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. NAME IT LIKE ENGLISH                                            │
+│     "If you can't name it clearly, you don't understand it."       │
+│                                                                     │
+│  2. ONE METHOD = ONE JOB                                            │
+│     If the method name has "And" → split it.                       │
+│     validateAndSave() → validate() + save()                        │
+│                                                                     │
+│  3. RETURN, DON'T PRINT                                             │
+│     Methods should return results, not print them.                  │
+│     Let the caller decide what to do with the result.              │
+│                                                                     │
+│  4. FAIL FAST, FAIL LOUD                                            │
+│     Validate inputs at the top. Throw specific exceptions.         │
+│     Don't return -1 or null to signal errors.                      │
+│                                                                     │
+│  5. USE TYPES, NOT PRIMITIVES                                       │
+│     VehicleType > String, Coin > int, OrderStatus > String         │
+│     The compiler catches bugs that tests miss.                     │
+│                                                                     │
+│  6. NEVER RETURN NULL FOR COLLECTIONS                               │
+│     Return Collections.emptyList(), not null.                      │
+│     Use Optional<T> for single-item lookups.                       │
+│                                                                     │
+│  7. KEEP PARAMS ≤ 3                                                 │
+│     More than 3 → wrap in a request object.                        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
