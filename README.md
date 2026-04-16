@@ -3401,3 +3401,473 @@ if (allowedTypes.contains(vehicle.getType())) { /* allowed */ }
 | LRU Cache | `LinkedHashMap` | Access-order + auto-eviction |
 | Leaderboard | `TreeMap<Integer, List<Player>>` | Sorted by score, O(log n) updates |
 | Unique tags/categories | `HashSet<String>` | Fast contains check, no duplicates |
+
+---
+
+## ⏱️ 8. Scalability Thinking (Light, Not HLD Level)
+
+> In LLD interviews, you don't need to design distributed systems — but you MUST show awareness
+> of what happens when your design grows. Think: *"What breaks if this scales?"*
+
+---
+
+### 8.1 Designing for Extensibility — "What If We Add X Later?"
+
+The #1 signal interviewers look for: **Can your design accommodate new requirements without rewriting?**
+
+#### The Open/Closed Mindset
+
+```java
+// ❌ Rigid design — adding a new vehicle type requires modifying existing code
+
+class ParkingLot {
+    double calculateFee(String vehicleType, int hours) {
+        if (vehicleType.equals("BIKE"))       return hours * 10;
+        else if (vehicleType.equals("CAR"))   return hours * 20;
+        else if (vehicleType.equals("TRUCK")) return hours * 40;
+        // 💀 Adding BUS means modifying this method
+        return 0;
+    }
+}
+```
+
+```java
+// ✅ Extensible design — new vehicle type = new class, zero changes to existing code
+
+interface FeeStrategy {
+    double calculate(int hours);
+}
+
+class BikeFee implements FeeStrategy {
+    public double calculate(int hours) { return hours * 10; }
+}
+
+class CarFee implements FeeStrategy {
+    public double calculate(int hours) { return hours * 20; }
+}
+
+// Adding BUS → Just add a new class. Nothing else changes.
+class BusFee implements FeeStrategy {
+    public double calculate(int hours) { return hours * 50; }
+}
+
+class ParkingLot {
+    private Map<VehicleType, FeeStrategy> feeStrategies;
+
+    double calculateFee(VehicleType type, int hours) {
+        return feeStrategies.get(type).calculate(hours);
+    }
+}
+```
+
+#### Extension points checklist
+
+```
+When designing, ask yourself:
+
+□ What if we add a new TYPE?      → Use Strategy / Factory
+□ What if we add a new STATE?     → Use State Pattern
+□ What if we add a new LISTENER?  → Use Observer Pattern
+□ What if we add a new RULE?      → Use Strategy / Chain of Responsibility
+□ What if the DATA SOURCE changes?→ Use Repository pattern / Dependency Injection
+```
+
+#### Real examples of extensibility questions
+
+| Interviewer asks... | Your design should... |
+|---------------------|----------------------|
+| *"What if we add UPI payment?"* | New `UPIPayment implements PaymentStrategy` — zero changes elsewhere |
+| *"What if we add a VIP parking floor?"* | New `VIPFloor extends ParkingFloor` or new `VIPFeeStrategy` |
+| *"What if we need SMS + Push notifications?"* | New observers — just subscribe them to the event manager |
+| *"What if we need to support electric vehicles?"* | New `VehicleType.ELECTRIC` + new `EVParkingSpot` — existing code untouched |
+| *"What if pricing rules change seasonally?"* | Swap the `FeeStrategy` at runtime — Strategy pattern handles this |
+
+---
+
+### 8.2 Handling Large Data — Basic Awareness
+
+You won't design sharded databases in LLD, but you should know the **impact** of data size on your design.
+
+#### Use the right data structure for scale
+
+```java
+// ❌ Problem: Linear search doesn't scale
+
+class ParkingLot {
+    private List<ParkingSpot> allSpots; // 10,000 spots
+
+    ParkingSpot findAvailableSpot(VehicleType type) {
+        // O(n) scan every time — gets slow with 10K+ spots
+        for (ParkingSpot spot : allSpots) {
+            if (spot.isAvailable() && spot.getType() == type) {
+                return spot;
+            }
+        }
+        return null;
+    }
+}
+```
+
+```java
+// ✅ Better: Pre-index available spots for O(1) access
+
+class ParkingLot {
+    // Available spots organized by type — O(1) lookup
+    private Map<VehicleType, Queue<ParkingSpot>> availableSpots;
+
+    ParkingSpot findAvailableSpot(VehicleType type) {
+        Queue<ParkingSpot> queue = availableSpots.get(type);
+        return (queue != null && !queue.isEmpty()) ? queue.poll() : null;  // O(1)
+    }
+
+    void freeSpot(ParkingSpot spot) {
+        availableSpots.get(spot.getType()).offer(spot);  // O(1) return to pool
+    }
+}
+```
+
+#### Pagination for large result sets
+
+```java
+// ❌ Bad: return ALL orders (could be millions)
+List<Order> getAllOrders(String userId) {
+    return orderRepository.findByUserId(userId); // 💀 OOM for active users
+}
+
+// ✅ Good: paginate
+List<Order> getOrders(String userId, int page, int pageSize) {
+    int offset = page * pageSize;
+    return orderRepository.findByUserId(userId, offset, pageSize);
+}
+
+// Even better: cursor-based pagination
+List<Order> getOrders(String userId, String lastOrderId, int limit) {
+    return orderRepository.findAfter(userId, lastOrderId, limit);
+}
+```
+
+#### Lazy loading vs eager loading
+
+```java
+// ❌ Eager: loads everything upfront
+class BookCatalog {
+    private List<Book> allBooks;  // loads 100K books into memory on startup 💀
+
+    BookCatalog() {
+        this.allBooks = database.loadAllBooks(); // slow startup, huge memory
+    }
+}
+
+// ✅ Lazy: load on demand
+class BookCatalog {
+    private Map<String, Book> cache = new HashMap<>();
+
+    Book getBook(String isbn) {
+        return cache.computeIfAbsent(isbn, id -> database.findByIsbn(id));
+        // Only fetched when actually needed, then cached
+    }
+}
+```
+
+---
+
+### 8.3 Thread Safety — Basic Awareness
+
+> *"What if multiple users access this simultaneously?"*
+
+This is the most common scalability follow-up in LLD interviews. You don't need to write lock-free algorithms — just show **awareness** of the problem and basic solutions.
+
+#### The Problem: Race Conditions
+
+```java
+// ❌ NOT thread-safe: two users could get the SAME parking spot
+
+class ParkingLot {
+    private List<ParkingSpot> availableSpots;
+
+    ParkingSpot findAndPark(Vehicle vehicle) {
+        ParkingSpot spot = availableSpots.get(0);   // Thread A reads spot #1
+                                                     // Thread B also reads spot #1
+        spot.park(vehicle);                          // Thread A parks
+                                                     // Thread B also parks → 💀 COLLISION!
+        availableSpots.remove(spot);
+        return spot;
+    }
+}
+```
+
+#### Solution 1: `synchronized` (simplest)
+
+```java
+// ✅ Thread-safe with synchronized — one thread at a time
+
+class ParkingLot {
+    private final List<ParkingSpot> availableSpots;
+
+    // Only one thread can execute this method at a time
+    synchronized ParkingSpot findAndPark(Vehicle vehicle) {
+        if (availableSpots.isEmpty()) {
+            throw new ParkingFullException("No spots available");
+        }
+        ParkingSpot spot = availableSpots.remove(0); // atomic: find + remove
+        spot.park(vehicle);
+        return spot;
+    }
+
+    synchronized void freeSpot(ParkingSpot spot) {
+        spot.unpark();
+        availableSpots.add(spot);
+    }
+}
+```
+
+**Trade-off:** Simple, but only one thread can park/unpark at a time → potential bottleneck.
+
+#### Solution 2: `ReentrantLock` (more control)
+
+```java
+// ✅ Fine-grained locking — lock per vehicle type, not the entire lot
+
+class ParkingLot {
+    private final Map<VehicleType, Queue<ParkingSpot>> availableSpots;
+    private final Map<VehicleType, ReentrantLock> locks;
+
+    ParkingLot() {
+        availableSpots = new EnumMap<>(VehicleType.class);
+        locks = new EnumMap<>(VehicleType.class);
+
+        for (VehicleType type : VehicleType.values()) {
+            availableSpots.put(type, new LinkedList<>());
+            locks.put(type, new ReentrantLock());
+        }
+    }
+
+    ParkingSpot findAndPark(Vehicle vehicle) {
+        VehicleType type = vehicle.getType();
+        ReentrantLock lock = locks.get(type);
+
+        lock.lock(); // lock only for THIS vehicle type
+        try {
+            Queue<ParkingSpot> spots = availableSpots.get(type);
+            if (spots.isEmpty()) {
+                throw new ParkingFullException(type);
+            }
+            ParkingSpot spot = spots.poll();
+            spot.park(vehicle);
+            return spot;
+        } finally {
+            lock.unlock(); // ALWAYS unlock in finally
+        }
+    }
+}
+// Now: Car parking and Bike parking can happen simultaneously!
+```
+
+#### Solution 3: Concurrent Collections
+
+```java
+// ✅ Use thread-safe collections from java.util.concurrent
+
+// Instead of HashMap → ConcurrentHashMap
+Map<String, Ticket> activeTickets = new ConcurrentHashMap<>();
+
+// Instead of ArrayList → CopyOnWriteArrayList (for read-heavy scenarios)
+List<Observer> observers = new CopyOnWriteArrayList<>();
+
+// Instead of LinkedList as Queue → ConcurrentLinkedQueue
+Queue<ParkingSpot> availableSpots = new ConcurrentLinkedQueue<>();
+
+// Instead of LinkedList as Queue (blocking) → LinkedBlockingQueue
+BlockingQueue<Order> orderQueue = new LinkedBlockingQueue<>();
+// .take() blocks until an item is available — perfect for producer-consumer
+```
+
+#### Solution 4: Atomic Operations
+
+```java
+// ✅ For simple counters/flags — no locks needed
+
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+class ParkingFloor {
+    private AtomicInteger availableCount = new AtomicInteger(100);
+
+    boolean tryPark() {
+        int current = availableCount.get();
+        if (current <= 0) return false;
+        return availableCount.compareAndSet(current, current - 1);
+        // Atomic: only succeeds if no other thread changed the value
+    }
+
+    void freeSpot() {
+        availableCount.incrementAndGet(); // atomic increment
+    }
+}
+```
+
+#### Thread-safety decision guide
+
+```
+Q: What kind of shared resource?
+│
+├─ Simple counter / flag
+│  → AtomicInteger, AtomicBoolean
+│     (lock-free, highest performance)
+│
+├─ Key-value lookup (read-heavy)
+│  → ConcurrentHashMap
+│     (segment-level locking, concurrent reads)
+│
+├─ Ordered list (read-heavy, rare writes)
+│  → CopyOnWriteArrayList
+│     (copy on write, fast reads)
+│
+├─ Queue (producer-consumer)
+│  → ConcurrentLinkedQueue (non-blocking)
+│  → LinkedBlockingQueue (blocking — waits for items)
+│
+├─ Complex multi-step operation
+│  → synchronized method or block
+│     (simple, coarse-grained)
+│
+└─ Need per-resource locking
+   → ReentrantLock (fine-grained control)
+   → ReadWriteLock (many readers, few writers)
+```
+
+---
+
+### 8.4 Common Interview Scenarios & Responses
+
+#### Scenario 1: *"What if multiple users try to book the same slot?"*
+
+```
+Answer framework:
+
+1. IDENTIFY the shared resource → the slot/spot/seat
+2. EXPLAIN the race condition → two users read "available", both try to book
+3. PROPOSE a solution:
+   - Option A: synchronized block around check-and-book
+   - Option B: Optimistic locking (check version, retry on conflict)
+   - Option C: Database-level locking (SELECT FOR UPDATE)
+4. DISCUSS trade-offs:
+   - synchronized → simple but bottleneck under high load
+   - Optimistic locking → better performance, but requires retry logic
+```
+
+```java
+// Concrete answer:
+
+class BookingService {
+    private final ReentrantLock lock = new ReentrantLock();
+
+    Booking bookSlot(User user, Slot slot) {
+        lock.lock();
+        try {
+            if (!slot.isAvailable()) {
+                throw new SlotUnavailableException("Slot already booked");
+            }
+            slot.markBooked();
+            return new Booking(user, slot);
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+```
+
+#### Scenario 2: *"What if the inventory runs out mid-transaction?"*
+
+```
+Answer:
+- Check availability BEFORE deducting money
+- Use synchronized/lock to make check-and-deduct atomic
+- If out of stock after money inserted → refund immediately
+- This is exactly what the Vending Machine State Pattern handles:
+  HasMoneyState validates stock before transitioning to DispensingState
+```
+
+#### Scenario 3: *"How would you handle 10 million products?"*
+
+```
+Answer (LLD level — not HLD):
+- Don't load all into memory → use lazy loading / pagination
+- Index by key fields → HashMap<productId, Product>
+- Use in-memory cache for hot products (LRU cache with eviction)
+- Search by category → pre-group into Map<Category, List<Product>>
+- If asked to go deeper → acknowledge it's an HLD concern
+  (sharding, Elasticsearch, Redis caching)
+```
+
+#### Scenario 4: *"What if we need to add audit logging to every action?"*
+
+```
+Answer:
+- Use Decorator Pattern → wrap existing services with logging decorator
+- Keeps existing code untouched (OCP)
+```
+
+```java
+interface OrderService {
+    Order placeOrder(OrderRequest request);
+}
+
+class OrderServiceImpl implements OrderService {
+    public Order placeOrder(OrderRequest request) { /* business logic */ }
+}
+
+// Decorator adds logging without touching OrderServiceImpl
+class AuditedOrderService implements OrderService {
+    private OrderService delegate;
+    private AuditLogger logger;
+
+    AuditedOrderService(OrderService delegate, AuditLogger logger) {
+        this.delegate = delegate;
+        this.logger = logger;
+    }
+
+    public Order placeOrder(OrderRequest request) {
+        logger.log("ORDER_PLACED", request);        // before
+        Order order = delegate.placeOrder(request);  // actual work
+        logger.log("ORDER_COMPLETED", order);        // after
+        return order;
+    }
+}
+```
+
+---
+
+### 🎯 Scalability Thinking Cheat Sheet
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│              SCALABILITY THINKING CHECKLIST                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  EXTENSIBILITY                                                      │
+│  □ Can I add a new type without modifying existing code?            │
+│  □ Am I using interfaces/strategies for things that vary?           │
+│  □ Are my patterns (Strategy/Observer/State) enabling growth?       │
+│                                                                     │
+│  DATA GROWTH                                                        │
+│  □ Am I using O(1) lookup where possible? (HashMap over List scan) │
+│  □ Am I paginating large result sets?                               │
+│  □ Am I loading lazily instead of eagerly?                          │
+│  □ Do I have an eviction strategy for caches?                       │
+│                                                                     │
+│  THREAD SAFETY                                                      │
+│  □ What is my shared mutable state?                                 │
+│  □ Can two threads corrupt this data simultaneously?                │
+│  □ Am I using the simplest safe solution?                           │
+│     (Atomic → ConcurrentCollection → synchronized → Lock)          │
+│  □ Am I locking at the right granularity?                           │
+│     (Per-type, not the entire system)                               │
+│                                                                     │
+│  THE MAGIC PHRASE FOR INTERVIEWS                                    │
+│  "In a single-instance setup, I'd use [synchronized/ConcurrentMap].│
+│   For a distributed system, this would need [DB locks / message     │
+│   queue / Redis] — but that's an HLD concern."                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
