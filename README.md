@@ -1,6 +1,84 @@
 # Low-Level-Design
 
-Core LLD
+Core LLD — Everything you need for LLD interviews, from OOP fundamentals to design patterns to real implementations.
+
+---
+
+## 📑 Table of Contents
+
+| # | Section | Key Topics |
+|---|---------|------------|
+| 1 | [Core OOP](#1-core-oop-non-negotiable) | Encapsulation, Abstraction, Inheritance, Polymorphism, Composition vs Inheritance, Overloading vs Overriding, Access Modifiers |
+| 2 | [SOLID Principles](#solid-principles-in-java) | SRP, OCP, LSP, ISP, DIP |
+| 3 | [Design Patterns](#-3-design-patterns-most-important-section) | Singleton, Factory, Adapter, Decorator, Strategy ⭐, Observer ⭐, State |
+| 4 | [Class Design Skills](#4-class-design-skills-this-is-the-real-test) | Entities, Relationships, Interfaces vs Abstract Classes, Library System Example |
+| 6 | [API & Method Design](#-6-api--method-design) | Clean Signatures, Naming, Return Types, Edge Cases, Custom Exceptions |
+| 7 | [Data Structures in Design](#️-7-data-structures-in-design) | HashMap, List vs Set, PriorityQueue, Queue, LRU Cache |
+| 8 | [Scalability Thinking](#️-8-scalability-thinking-light-not-hld-level) | Extensibility, Large Data, Thread Safety |
+| 9 | [Edge Cases & Constraints](#-9-edge-cases--constraints) | Null Handling, Input Validation, Concurrency, Capacity Limits, Defensive Coding |
+
+### Detailed Index
+
+- **1. Core OOP**
+  - [1.1 Encapsulation](#11-encapsulation)
+  - [1.2 Abstraction](#12-abstraction)
+  - [1.3 Inheritance](#13-inheritance)
+  - [1.4 Polymorphism](#14-polymorphism)
+  - [1.5 Composition vs Inheritance](#15-composition-vs-inheritance--very-commonly-asked)
+  - [1.6 Overloading vs Overriding](#16-overloading-vs-overriding)
+  - [1.7 Access Modifiers](#17-access-modifiers)
+- **2. SOLID Principles**
+  - [Single Responsibility (SRP)](#1-single-responsibility-principle-srp)
+  - [Open/Closed (OCP)](#2-openclosed-principle-ocp)
+  - [Liskov Substitution (LSP)](#3-liskov-substitution-principle-lsp)
+  - [Interface Segregation (ISP)](#4-interface-segregation-principle-isp)
+  - [Dependency Inversion (DIP)](#5-dependency-inversion-principle-dip)
+- **3. Design Patterns**
+  - [3.1 Singleton](#31-singleton-pattern-creational)
+  - [3.2 Factory / Factory Method](#32-factory--factory-method-pattern-creational)
+  - [3.3 Adapter](#33-adapter-pattern-structural)
+  - [3.4 Decorator](#34-decorator-pattern-structural)
+  - [3.5 Strategy ⭐](#35-strategy-pattern-behavioral--most-important)
+  - [3.6 Observer ⭐](#36-observer-pattern-behavioral--very-common)
+  - [3.7 State](#37-state-pattern-behavioral)
+  - [Design Pattern Cheat Sheet](#️-design-pattern-cheat-sheet)
+- **4. Class Design Skills**
+  - [4.1 Identifying Entities, Attributes, Methods](#41-identifying-entities-attributes-and-methods)
+  - [4.2 Relationships (Association, Aggregation, Composition)](#42-relationships-between-classes)
+  - [4.3 Interfaces vs Abstract Classes](#43-interfaces-vs-abstract-classes--when-to-use-which)
+  - [4.4 Full Example: Library Management System](#44-full-worked-example--library-management-system)
+- **6. API & Method Design**
+  - [6.1 Clean Method Signatures](#61-clean-method-signatures--the-rules)
+  - [6.2 Naming](#62-naming--the-art-of-self-documenting-code)
+  - [6.3 Input/Output Clarity](#63-inputoutput-clarity)
+  - [6.4 Handling Edge Cases](#64-handling-edge-cases)
+  - [6.5 Custom Exceptions](#65-custom-exceptions--not-just-runtimeexception)
+  - [6.6 Before/After: Parking Lot API](#66-full-beforeafter--parking-lot-api-refactored)
+- **7. Data Structures in Design**
+  - [7.1 HashMap](#71-hashmap--the-workhorse-used-almost-everywhere)
+  - [7.2 List vs Set](#72-list-vs-set--when-order--duplicates-matter)
+  - [7.3 PriorityQueue](#73-priorityqueue--for-scheduling--priority-problems)
+  - [7.4 Queue](#74-queue--for-real-world-flows-fifo)
+  - [7.5 Bonus DS (Stack, LinkedList, EnumMap)](#75-bonus--other-ds-choices-in-lld)
+  - [DS Decision Cheat Sheet](#️-data-structure-decision-cheat-sheet)
+- **8. Scalability Thinking**
+  - [8.1 Extensibility](#81-designing-for-extensibility--what-if-we-add-x-later)
+  - [8.2 Handling Large Data](#82-handling-large-data--basic-awareness)
+  - [8.3 Thread Safety](#83-thread-safety--basic-awareness)
+  - [8.4 Interview Scenarios & Responses](#84-common-interview-scenarios--responses)
+- **9. Edge Cases & Constraints**
+  - [9.1 Null Handling](#91-null-handling--the-billion-dollar-mistake)
+  - [9.2 Invalid Input Handling](#92-invalid-input-handling)
+  - [9.3 Concurrency Edge Cases](#93-concurrency-edge-cases)
+  - [9.4 Capacity Limits](#94-capacity-limits)
+  - [9.5 Defensive Coding Patterns](#95-defensive-coding-patterns)
+  - [9.6 Edge Cases by System Type](#96-edge-cases-by-system-type)
+
+### 📂 Implementations
+
+| System | Pattern Used | Folder |
+|--------|-------------|--------|
+| Vending Machine | State Pattern | [`VendingMachine/`](VendingMachine/) |
 
 ---
 
