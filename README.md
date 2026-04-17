@@ -98,6 +98,7 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
 | Parking Lot | Singleton, Strategy (Pricing) | [`ParkingLot/`](ParkingLot/) |
 | Elevator System | SCAN Algorithm, Min/Max PriorityQueues | [`ElevatorSystem/`](ElevatorSystem/) |
 | LRU Cache | Doubly Linked List, HashMap ($O(1)$) | [`LRUCacheSystem/`](LRUCacheSystem/) |
+| Sudoku | Backtracking, Deep Matrices, Service decoupling | [`SudokuSystem/`](SudokuSystem/) |
 
 ---
 
