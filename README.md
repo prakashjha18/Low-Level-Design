@@ -94,6 +94,7 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
 | Vending Machine | State Pattern | [`VendingMachine/`](VendingMachine/) |
 | Food Ordering Platform | State, Observer, Strategy | [`FoodOrderingSystem/`](FoodOrderingSystem/) |
 | Snake & Ladder | Queue (Turns), Unified Jumper POJO | [`SnakeAndLadder/`](SnakeAndLadder/) |
+| Splitwise | Strategy, O(1) Balance Matrix | [`Splitwise/`](Splitwise/) |
 
 ---
 
