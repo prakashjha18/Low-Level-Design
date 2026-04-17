@@ -92,13 +92,14 @@ Core LLD — Everything you need for LLD interviews, from OOP fundamentals to de
 | System | Pattern Used | Folder |
 |--------|-------------|--------|
 | Vending Machine | State Pattern | [`VendingMachine/`](VendingMachine/) |
-| Food Ordering Platform | State, Observer, Strategy | [`FoodOrderingSystem/`](FoodOrderingSystem/) |
+| Food Ordering Platform | Facade, State-Guards, Aggregation | [`FoodOrderingSystem/`](FoodOrderingSystem/) |
 | Snake & Ladder | Queue (Turns), Unified Jumper POJO | [`SnakeAndLadder/`](SnakeAndLadder/) |
 | Splitwise | Strategy, O(1) Balance Matrix | [`Splitwise/`](Splitwise/) |
 | Parking Lot | Singleton, Strategy (Pricing) | [`ParkingLot/`](ParkingLot/) |
 | Elevator System | SCAN Algorithm, Min/Max PriorityQueues | [`ElevatorSystem/`](ElevatorSystem/) |
 | LRU Cache | Doubly Linked List, HashMap ($O(1)$) | [`LRUCacheSystem/`](LRUCacheSystem/) |
 | Sudoku | Backtracking, Deep Matrices, Service decoupling | [`SudokuSystem/`](SudokuSystem/) |
+| Chess | Polymorphism, 2D State Bounds, Object Isolation | [`ChessSystem/`](ChessSystem/) |
 
 ---
 
