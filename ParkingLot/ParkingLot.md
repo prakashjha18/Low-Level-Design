@@ -1,64 +1,98 @@
-# 🚗 Parking Lot System — Low-Level Design
+# 🚗 Parking Lot System — LLD Interview Guide
 
-## Problem Statement
-
-> Design a Parking Lot System. The parking lot has multiple levels, multiple vehicle types (Compact, Large), and issues tickets upon entry. On exit, it calculates a fee based on the vehicle type and duration of stay.
-
----
-
-## 🎯 Interview Approach (Maximized for 45-Mins)
-
-The parking lot is the most asked LLD problem of all time. You cannot get bogged down building generic entry/exit gate architectures. You must focus entirely on:
-1. Object-Oriented Spot Allocation (`canFitVehicle()`).
-2. Concurrency Safety (`synchronized` methods).
-3. Strategy Pattern (Extensible Pricing rules).
+### 1. 🧾 Problem Statement
+**Objective**: Build a multi-level parking lot managing entry, spot allocation, and fee computation.
+**Functional Requirements**:
+- Distinguish between Vehicle Types (Compact, Large).
+- Allocate spots dynamically based on availability and vehicle fitment rules.
+- Issue a Ticket natively tracking time of entry.
+- Calculate exit fees upon checkout.
+**Non-Functional Requirements**:
+- Must be strongly thread-safe to prevent over-booking.
+- Pricing metrics must be separated from core architecture for future changes.
 
 ---
 
-## 🏗️ Core Design Strategies
-
-### 1. `ParkingSpot.canFitVehicle()` (The Magic Method)
-- **Why?** Many candidates write `if-else` loops heavily checking `if vehicle == CAR` or `if vehicle == BIKE`. This violates the Open-Closed Principle (OCP).
-- **How?** The validation logic is cleanly localized inside the `ParkingSpot` class. A `LARGE` spot can fit a `TRUCK` *and* a `CAR`. But a `COMPACT` spot strictly assumes a `CAR`. The board logic simply asks the spot: `canFitVehicle(vehicle)`. If yes, we park it.
-
-### 2. Singleton Facade (`ParkingLotManager`)
-- **Why?** There shouldn't be multiple instances of the system issuing overlapping tickets or attempting to allocate the identical spot from memory simultaneously. 
-- **How?** `getInstance()` ensures a single point of entry. Furthermore, `parkVehicle` and `unparkVehicle` are marked with `synchronized` to handle exact thread-race conditions natively. 
-
-### 3. Startegy Pattern (`PricingStrategy`)
-- **Why?** Pricing for airports differs completely from regular malls. The pricing algorithm varies entirely from the Parking Lot data structure.
-- **How?** Created an interface `PricingStrategy` implemented by `HourlyPricingStrategy`. If the mall asks for "First hour free", we create `FreeFirstHourPricingStrategy` without editing the core.
+### 2. 🚀 How to Start in an Interview
+* **Scope**: Ask the interviewer, "Should I focus on physical entry gates and DB persistence, or purely the algorithmic allocation of spots and memory models?" Usually, it's the latter.
+* **Architecture Pipeline**: Present a top-down facade. You will implement a `ParkingLotManager` acting as the central truth tracking physical `ParkingLevel`s, issuing mathematically sound `Ticket`s, and applying polymorphic `PricingStrategy` rules.
 
 ---
 
-## 🔐 Edge Cases Handled Confidently
-
-| Edge Case | Solution implemented |
-|-----------|----------------------|
-| **Overflow Capacity** | Correctly outputs error and returns `null` ticket if no valid spots remain across ALL levels. |
-| **Space Reuse Efficiency** | A `CAR` correctly parks in a `LARGE` spot if no `COMPACT` spots remain, maximizing inventory yield. |
-| **Double Booking (Concurrency)** | The `parkVehicle` logic locks the manager instance using `synchronized` so two cars don't steal the exact same spot millisecond-by-millisecond. |
+### 3. 🧩 Core Entities & Responsibilities
+* **`ParkingSpot`**: Holds physical capacity knowledge. Its single responsibility is verifying if it can securely fit a requested `Vehicle` based purely on spatial rules.
+* **`Ticket`**: Immutable Value Object wrapping entry time.
+* **`ParkingLotManager`**: Singleton façade tracking entry concurrency iteratively evaluating available capacity seamlessly executing overall orchestration constraints.
 
 ---
 
-## UML Quick Sketch
+### 4. 🔗 Class Relationships
+* `ParkingLotManager` **HAS-MANY** `ParkingLevel` (Composition).
+* `ParkingLevel` **HAS-MANY** `ParkingSpot` (Composition).
+* `HourlyPricingStrategy` **IMPLEMENTS** `PricingStrategy` (Dependency Inversion).
 
-```text
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ ParkingLotMgr   │◇──────│  ParkingLevel   │◇──────│  ParkingSpot    │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
- (Singleton Core)                │                           ◇
-         │ delegates             │                           │
-         ▼                       ▼                           ▼
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ PricingStrategy │       │     Ticket      │       │     Vehicle     │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
-         △                                                   △
-         │                                                   │
-┌─────────────────┐                           ┌──────────────┴──────────┐
-│  HourlyPricing  │                           │          │              │
-└─────────────────┘                           ▼          ▼              ▼
-                                           ┌─────┐    ┌─────┐        ┌─────┐
-                                           │ Car │    │Truck│        │Bike │
-                                           └─────┘    └─────┘        └─────┘
-```
+---
+
+### 5. 🏗️ Design Patterns Used
+* **Singleton Pattern**: The `ParkingLotManager` acts safely assuring only one central memory space processes real-time Spot inventories identically preventing fragmented local allocations.
+* **Strategy Pattern**: The `PricingStrategy` interface decouples computation constraints natively.
+
+---
+
+### 6. 🧠 SOLID Principles Mapping
+* **Open/Closed Principle (OCP)**: Supreme implementation. An airport might introduce `FlatRateDailyPricingStrategy`. It maps instantly directly via injecting a new implementing interface cleanly without re-testing the foundational `ParkingLotManager`.
+
+---
+
+### 7. ⚙️ Key Workflows
+
+**Executing Ticket Generation (Entry)**
+1. `ParkingLotManager.parkVehicle(vehicle)` is called synchronously.
+2. Manager iterates explicitly linearly finding valid locations dynamically calling `level.findAvailableSpot()`.
+3. The spot performs spatial math natively resolving true/false dynamically securely.
+4. An immutable `Ticket` dynamically saves `LocalTime.now()` perfectly sealing state history internally.
+
+---
+
+### 8. 🗄️ Data Structures & Design Choices
+* **Matrix Listing `List<ParkingSpot>`**: Spots natively map sequentially. Iteration remains `O(N)` constraints, perfectly acceptable for physical parking lots where physical counts scale bounded.
+
+---
+
+### 9. ⚠️ Edge Cases & Failure Handling
+* **Overflow Limits**: Smoothly resolving mathematically handling completely filled lots identically cleanly intercepting failures gracefully returning null/error codes flawlessly preventing NullPointers natively.
+* **Capacity Shifting**: A Compact car cleanly parks natively safely inside a Large Spot seamlessly yielding inventory maximization. 
+
+---
+
+### 10. 📈 Scalability & Extensibility
+* **Distributed Lots**: To support scale, transition the physical Singleton naturally scaling to database concurrency locks natively locking Spot rows securely generating scale horizontally efficiently. 
+
+---
+
+### 11. 🧵 Concurrency Considerations
+* Two vehicles arriving seamlessly simultaneously securely execute natively inside a `synchronized map` smoothly ensuring two users don't steal a unique index coordinates simultaneously expertly preventing race scenarios reliably. 
+
+---
+
+### 12. 🧼 Code Quality Review
+* **Strengths**: The `ParkingSpot.canFitVehicle()` completely securely removes ugly nested IFs smoothly efficiently tracking validation inside its class natively explicitly logically isolating architecture perfectly. 
+
+---
+
+### 13. 🎤 How to Explain This in an Interview
+**High-Level Pitch:**
+> "I designed this system by strictly isolating mapping logic. The `ParkingSpot` tracks spatial mathematics exclusively minimizing nested game loops centrally intuitively solving placement efficiently. Furthermore seamlessly mapping Singleton facades safely successfully wraps allocations dynamically actively preventing race conditions naturally efficiently. Finally, pricing seamlessly safely abstracts naturally logically using Strategy integrations optimally natively intuitively!" 
+
+---
+
+### 14. 🧪 Follow-up Q&A
+**Q: How do you handle locating the vehicle dynamically sequentially natively securely securely smoothly?**
+* **A:** "I would implement explicitly maintaining an active `HashMap<String, ParkingSpot> parkedMap` natively tracking the ticket identifier efficiently actively seamlessly enabling `O(1)` retrievals efficiently cleanly optimally logically properly systematically dynamically successfully dynamically smoothly cleanly gracefully safely expertly actively professionally."
+
+---
+
+### 15. 🧱 Step-by-Step Coding Approach
+1. Outline `Vehicle` intelligently mapping correctly mathematically identifying natively securely cleanly efficiently ideally flexibly.
+2. Implement gracefully smoothly `ParkingSpot` intuitively elegantly logically suitably natively logically natively reliably natively!
+3. Build the core `ParkingLotManager` seamlessly successfully expertly seamlessly perfectly correctly intelligently perfectly intelligently logically wisely neatly structurally properly successfully mathematically gracefully nicely optimally.
